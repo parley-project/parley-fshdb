@@ -26,6 +26,9 @@ import us.bringardner.fsh.ide.core.Breakpoint;
  * fsh-ide's DebugSession looks breakpoints up by editor line on the script's thread; that
  * lookup (forEditorLine) reads a concurrent map that is rebuilt when breakpoints or the
  * script's lines change.
+ * <p>
+ * A change listener (see setChangeListener) hears of each change, after it's made, on the
+ * thread that made it; an exception it throws goes to that caller (the change stays made).
  */
 public class Breakpoints {
 
@@ -46,9 +49,22 @@ public class Breakpoints {
 	private final Map<Integer,Breakpoint> byEditorLine = new ConcurrentHashMap<>();
 	private int next = 1;
 	private ScriptFile script;
+	private volatile Runnable changeListener;
 
 	public Breakpoints(ScriptFile script) {
 		this.script = script;
+	}
+
+	/** Told after each change (add, remove, clear, condition, enable); null for none. */
+	public void setChangeListener(Runnable listener) {
+		this.changeListener = listener;
+	}
+
+	private void changed() {
+		Runnable r = changeListener;
+		if( r != null ) {
+			r.run();
+		}
 	}
 
 	/** The script's lines changed (it was edited or another one was opened). */
@@ -78,41 +94,73 @@ public class Breakpoints {
 	 * @param condition a command (such as [ $i -gt 3 ]): stop only if it succeeds; null for none
 	 * @param hitCount stop only on this hit; 0 for every hit
 	 */
-	public synchronized Entry add(int fileLine, String condition, int hitCount) {
-		Entry e = atFileLine(fileLine);
-		if( e == null ) {
-			Breakpoint bp = new Breakpoint();
-			e = new Entry(next++, fileLine, bp);
-			byNumber.put(e.number, e);
+	public Entry add(int fileLine, String condition, int hitCount) {
+		Entry e;
+		synchronized (this) {
+			e = atFileLine(fileLine);
+			if( e == null ) {
+				Breakpoint bp = new Breakpoint();
+				e = new Entry(next++, fileLine, bp);
+				byNumber.put(e.number, e);
+			}
+			applyCondition(e, condition);
+			e.breakpoint.setHitCount(hitCount > 0 ? hitCount : -1);
+			e.breakpoint.setHitCount(hitCount > 0);
+			e.breakpoint.reset();
+			reindex();
 		}
-		setCondition(e, condition);
-		e.breakpoint.setHitCount(hitCount > 0 ? hitCount : -1);
-		e.breakpoint.setHitCount(hitCount > 0);
-		e.breakpoint.reset();
-		reindex();
+		changed();
 		return e;
 	}
 
 	/** Sets (or, with null or "", removes) a breakpoint's condition. */
-	public synchronized void setCondition(Entry e, String condition) {
+	public void setCondition(Entry e, String condition) {
+		synchronized (this) {
+			applyCondition(e, condition);
+		}
+		changed();
+	}
+
+	private static void applyCondition(Entry e, String condition) {
 		boolean has = condition != null && !condition.isBlank();
 		e.breakpoint.setConditional(has);
 		e.breakpoint.setCondition(has ? condition.trim() : "");
+	}
+
+	/** Enables or disables a breakpoint. */
+	public void setEnabled(Entry e, boolean enabled) {
+		synchronized (this) {
+			e.breakpoint.setEnabled(enabled);
+		}
+		changed();
 	}
 
 	public synchronized Entry get(int number) {
 		return byNumber.get(number);
 	}
 
-	public synchronized boolean remove(int number) {
-		boolean ret = byNumber.remove(number) != null;
-		reindex();
+	public boolean remove(int number) {
+		boolean ret;
+		synchronized (this) {
+			ret = byNumber.remove(number) != null;
+			reindex();
+		}
+		if( ret ) {
+			changed();
+		}
 		return ret;
 	}
 
-	public synchronized void clear() {
-		byNumber.clear();
-		reindex();
+	public void clear() {
+		boolean had;
+		synchronized (this) {
+			had = !byNumber.isEmpty();
+			byNumber.clear();
+			reindex();
+		}
+		if( had ) {
+			changed();
+		}
 	}
 
 	/** In number order. */

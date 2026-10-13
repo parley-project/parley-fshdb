@@ -29,4 +29,16 @@ public interface CommandInput {
 
 	default void resume() {
 	}
+
+	/**
+	 * Shows text above the line being typed (a remote script stopped while the prompt was up).
+	 * @return false if it can't (the debugger then reports it after the next command)
+	 */
+	default boolean printAbove(String text) {
+		return false;
+	}
+
+	/** Ends a readLine that's waiting (it returns ""), so the debugger can leave. */
+	default void wake() {
+	}
 }

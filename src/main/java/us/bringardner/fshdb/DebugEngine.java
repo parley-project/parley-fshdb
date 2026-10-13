@@ -29,14 +29,14 @@ import us.bringardner.fsh.ide.core.ScriptRun;
 
 /**
  * Runs and debugs one script: its breakpoints, the run, where it's stopped and its variables.
- * It has no user interface; the command line (Debugger) and the DAP server (DapServer) are
+ * It has no user interface; the command line (Debugger) and the DAP adapter (FshdbAdapter) are
  * front ends to it.
  * <p>
  * Threads: what the script does is reported to the {@link Listener} on the script's threads.
  * The other methods may be called on any thread; the ones about the stopped script
  * (variables, setVariable, frames ...) only make sense while it's stopped.
  */
-public class DebugEngine {
+public class DebugEngine implements DebugTarget {
 
 	/** Why the script stopped. */
 	public enum StopReason {
@@ -68,6 +68,10 @@ public class DebugEngine {
 
 		/** A statement ran (only while trace is on). */
 		default void statement(int fileLine, String text) {
+		}
+
+		/** A message from the script's side for the user (a remote fshdb's output events). */
+		default void message(String text) {
 		}
 	}
 
@@ -503,6 +507,25 @@ public class DebugEngine {
 		return run == null ? finalVariables : null;
 	}
 
+	@Override
+	public Map<String,String> variableList(boolean all) {
+		Map<String,Object> v = variables();
+		if( v == null ) {
+			return null;
+		}
+		Map<String,String> ret = new java.util.LinkedHashMap<>();
+		for(us.bringardner.fsh.ide.core.Variable var : DebugVariables.list(v, all)) {
+			ret.put(var.getName(), Debugger.format(var.getValue()));
+		}
+		return ret;
+	}
+
+	@Override
+	public String formattedVariable(String name) {
+		Object v = variable(name);
+		return v == null ? null : Debugger.format(v);
+	}
+
 	/** True if variable() has variables to look in (stopped, or a run has ended). */
 	public boolean hasVariables() {
 		return variables() != null;
@@ -561,13 +584,10 @@ public class DebugEngine {
 	 * Sets a variable of the stopped script: NAME, $NAME, or a positional parameter ($1 or 1).
 	 * @return the name it was set as
 	 */
+	@Override
 	public String setVariable(String name, String value) {
 		ShellContext ctx = requirePaused();
-		if( name.matches("\\$?\\d+")) {
-			name = name.startsWith("$") ? name : "$"+name;
-		} else if( name.startsWith("$")) {
-			name = name.substring(1);
-		}
+		name = DebugTarget.variableName(name);
 		DebugVariables.set(ctx, name, value);
 		return name;
 	}

@@ -45,6 +45,11 @@ import org.jline.terminal.TerminalBuilder;
  * </pre>
  * runs the script in this console and lets a debugger attach over the Debug Adapter Protocol
  * (parley-dap; see DapHost).
+ * <pre>
+ * fshdb --attach [HOST:]PORT [-e COMMAND]... [-x FILE]
+ * </pre>
+ * is that debugger, in another console (or on another machine): the same commands, for the
+ * script the other fshdb runs (see RemoteTarget).
  */
 public class Fshdb {
 
@@ -53,6 +58,7 @@ public class Fshdb {
 	private static final String USAGE =
 			"Usage: fshdb [-e COMMAND]... [-x FILE] SCRIPT [ARGUMENTS...]\n"
 			+ "       fshdb --listen [HOST:]PORT [--suspend] SCRIPT [ARGUMENTS...]\n"
+			+ "       fshdb --attach [HOST:]PORT [-e COMMAND]... [-x FILE]\n"
 			+ "Debug a shell script with fsh, in the terminal.\n"
 			+ "\n"
 			+ "  -e COMMAND   run a debugger command first (may be repeated), e.g. -e 'break 10' -e run\n"
@@ -62,6 +68,9 @@ public class Fshdb {
 			+ "               Protocol (DAP): VS Code, Eclipse (LSP4E) ... HOST defaults to 127.0.0.1;\n"
 			+ "               use 0.0.0.0 to accept debuggers from other machines\n"
 			+ "  --suspend    with --listen: wait for a debugger before the script starts\n"
+			+ "  --attach [HOST:]PORT\n"
+			+ "               debug a script started with fshdb --listen (in another console, or on\n"
+			+ "               another machine), with the same commands; quit leaves it running\n"
 			+ "  -h, --help   show this help\n"
 			+ "  --version    show the version\n"
 			+ "\n"
@@ -83,6 +92,7 @@ public class Fshdb {
 	static int run(String[] args) throws IOException {
 		List<String> first = new ArrayList<>();
 		String listen = null;
+		String attach = null;
 		boolean suspend = false;
 		int i = 0;
 		for(; i < args.length; i++) {
@@ -99,6 +109,8 @@ public class Fshdb {
 				first.addAll(Files.readAllLines(Paths.get(args[++i]), StandardCharsets.UTF_8));
 			} else if( a.equals("--listen") && i+1 < args.length) {
 				listen = args[++i];
+			} else if( a.equals("--attach") && i+1 < args.length) {
+				attach = args[++i];
 			} else if( a.equals("--suspend")) {
 				suspend = true;
 			} else if( a.equals("--")) {
@@ -110,6 +122,13 @@ public class Fshdb {
 			} else {
 				break;
 			}
+		}
+		if( attach != null ) {
+			if( listen != null || suspend || i < args.length ) {
+				System.err.print("fshdb: --attach takes no script (it debugs the other fshdb's)\n"+USAGE);
+				return 2;
+			}
+			return attach(attach, first);
 		}
 		if( i >= args.length ) {
 			System.err.print(USAGE);
@@ -143,8 +162,7 @@ public class Fshdb {
 			return 2;
 		}
 
-		Terminal terminal = TerminalBuilder.builder().system(true).nativeSignals(true)
-				.signalHandler(Terminal.SignalHandler.SIG_IGN).build();
+		Terminal terminal = terminal();
 		try {
 			PrintStream out = System.out;
 			// the script reads the terminal through JLine's stream, so nothing typed for the
@@ -158,20 +176,51 @@ public class Fshdb {
 			if( scriptArgs.length() > 0 ) {
 				debugger.setArguments(scriptArgs.toString());
 			}
-			terminal.handle(Terminal.Signal.INT, sig -> debugger.interrupt());
-
-			LineReader reader = LineReaderBuilder.builder()
-					.terminal(terminal)
-					.appName("fshdb")
-					.completer(new DebuggerCompleter(debugger))
-					.variable(LineReader.HISTORY_FILE, new File(System.getProperty("user.home"), ".fshdb_history").toPath())
-					.variable(LineReader.HISTORY_SIZE, 1000)
-					.build();
-
 			out.println("fshdb "+VERSION+": "+script.getPath()+", "+script.lineCount()+" lines. Type help for the commands.");
-			CommandInput input = new JLineInput(reader, terminal, first);
-			return debugger.loop(input);
+			return debugger.loop(input(debugger, terminal, first));
 		} finally {
+			terminal.close();
+		}
+	}
+
+	private static Terminal terminal() throws IOException {
+		return TerminalBuilder.builder().system(true).nativeSignals(true)
+				.signalHandler(Terminal.SignalHandler.SIG_IGN).build();
+	}
+
+	/** Reads commands from the terminal (after first), with Ctrl-C going to the debugger. */
+	private static CommandInput input(Debugger debugger, Terminal terminal, List<String> first) {
+		terminal.handle(Terminal.Signal.INT, sig -> debugger.interrupt());
+		LineReader reader = LineReaderBuilder.builder()
+				.terminal(terminal)
+				.appName("fshdb")
+				.completer(new DebuggerCompleter(debugger))
+				.variable(LineReader.HISTORY_FILE, new File(System.getProperty("user.home"), ".fshdb_history").toPath())
+				.variable(LineReader.HISTORY_SIZE, 1000)
+				.build();
+		return new JLineInput(reader, terminal, first);
+	}
+
+	/** fshdb --attach: debug the script of a fshdb --listen. @return its exit code if it ended, else 0 */
+	static int attach(String address, List<String> first) throws IOException {
+		RemoteTarget target = RemoteTarget.connect(address);
+		Terminal terminal = terminal();
+		try {
+			PrintStream out = System.out;
+			Debugger debugger = new Debugger(target, out, System.out, System.err);
+			ScriptFile script = target.getScript();
+			out.println("fshdb "+VERSION+": attached to "+target.getAddress()+", "+script.getPath()+", "
+					+script.lineCount()+" lines.");
+			if( target.isWaitingToStart()) {
+				out.println("The script is waiting to start: set breakpoints, then run (or start, to stop at its first"
+						+ " statement).");
+			} else {
+				out.println("The script is running: set breakpoints, or Ctrl-C to pause it.");
+			}
+			out.println("quit leaves it running; kill stops it. Type help for the commands.");
+			return debugger.loop(input(debugger, terminal, first));
+		} finally {
+			target.close();
 			terminal.close();
 		}
 	}
@@ -181,6 +230,8 @@ public class Fshdb {
 		private final LineReader reader;
 		private final Terminal terminal;
 		private final List<String> first;
+		// woken before a readLine began: it returns at once
+		private volatile boolean woken;
 
 		JLineInput(LineReader reader, Terminal terminal, List<String> first) {
 			this.reader = reader;
@@ -196,9 +247,14 @@ public class Fshdb {
 				terminal.writer().flush();
 				return cmd;
 			}
+			if( woken ) {
+				woken = false;
+				return "";
+			}
 			try {
 				return reader.readLine(prompt);
 			} catch (UserInterruptException e) {
+				woken = false;
 				return "";
 			} catch (EndOfFileException e) {
 				return null;
@@ -208,6 +264,19 @@ public class Fshdb {
 		@Override
 		public void pause() {
 			terminal.pause();
+		}
+
+		@Override
+		public boolean printAbove(String text) {
+			reader.printAbove(text);
+			return true;
+		}
+
+		@Override
+		public void wake() {
+			// a readLine in progress ends as if Ctrl-C was typed (it returns "")
+			woken = true;
+			terminal.raise(Terminal.Signal.INT);
 		}
 
 		@Override
