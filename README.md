@@ -82,10 +82,37 @@ Scripts saved by fsh-ide keep their arguments and redirects in comment lines
 (`#BjlIdeScriptArgs=` ...); fshdb uses them and doesn't count them as code, but line numbers are
 always the file's, as your editor shows them.
 
-## Requirements
+## Attaching a debugger (DAP)
+
+Like a Java program started with `-agentlib:jdwp`, a script can run in one console while a
+debugger attaches to it from somewhere else, over the
+[Debug Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/):
+
+```
+console 1:  fshdb --listen 5005 --suspend deploy.sh staging    # the script's input and output stay here
+console 2:  any DAP client: VS Code, Eclipse (LSP4E), vim (vimspector) ...
+```
+
+- `--listen [HOST:]PORT` serves DAP on PORT. HOST defaults to 127.0.0.1 (this machine only);
+  `0.0.0.0` accepts debuggers from other machines, or use an SSH tunnel.
+- `--suspend` makes the script wait for a debugger (its `configurationDone`) before it starts.
+  Without it the script starts at once, and a debugger can attach while it runs and `pause` it.
+- One debugger at a time. When it disconnects, the script goes on without breakpoints and
+  another can attach; with "terminate" it stops the script. When the script ends, fshdb tells
+  the debugger and exits with the script's exit code.
+- Supported: breakpoints with conditions and hit counts, continue, next, step in, step out,
+  pause, the call stack, variables (arrays expand), setting variables, hovering over or
+  evaluating a variable (only variables: nothing else is run), and the source.
+- One thread, "main". Every frame shows the variables of the statement the script is stopped
+  at (fsh doesn't keep the callers' variables apart).
+
+The DAP side is [parley-dap](https://github.com/tony-bringardner/parley-dap).
+
+
 
 - Java 11 or later
-- fsh and fsh-ide (their SNAPSHOTs: `mvn install` them first), and JLine 3 (from Maven Central)
+- fsh, fsh-ide and parley-dap (their SNAPSHOTs: `mvn install` them first), and JLine 3 (from
+  Maven Central)
 - Linux or macOS terminal (Ctrl-C handling and terminal input need a real terminal; Windows
   isn't tested)
 
@@ -103,6 +130,8 @@ server's PATH. `FSHDB_JAVA_OPTS` passes options to Java.
 
 fshdb is a front end like fsh-ide's Swing and JavaFX IDEs: `ScriptRun` runs the script on its
 own thread with the terminal as its standard streams; a `DebugSession` stops it at breakpoints.
+`DebugEngine` holds the run, the breakpoints and where the script is stopped; the command line
+(`Debugger`) and the DAP adapter (`FshdbAdapter`, served by `DapHost`) are two front ends to it.
 `ConsoleDebugSession` adds what a command-line debugger needs on top of fsh-ide's session:
 `next` and `finish` by function depth, `step` that doesn't stop on a function's `{` line, and
 `start`. Only fsh-ide's core classes are used; its pom's Swing and JavaFX libraries are excluded.

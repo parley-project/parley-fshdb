@@ -35,6 +35,7 @@
 		<fsh.version>1.0.0-SNAPSHOT</fsh.version>
 		<fsh-ide.version>1.0.0-SNAPSHOT</fsh-ide.version>
 		<jline.version>3.30.17</jline.version>
+		<parley.version>1.0.0-SNAPSHOT</parley.version>
 	</properties>
 
 	<build>
@@ -162,6 +163,12 @@
 					<artifactId>*</artifactId>
 				</exclusion>
 			</exclusions>
+		</dependency>
+		<!-- The Debug Adapter Protocol (the listen option) -->
+		<dependency>
+			<groupId>us.bringardner.parley</groupId>
+			<artifactId>parley-dap</artifactId>
+			<version>${parley.version}</version>
 		</dependency>
 		<!-- The command line: history, editing, completion, Ctrl-C -->
 		<dependency>

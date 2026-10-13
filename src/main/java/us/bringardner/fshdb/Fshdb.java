@@ -40,6 +40,11 @@ import org.jline.terminal.TerminalBuilder;
  * </pre>
  * The commands given with -e (and those in FILE) run first, as if typed; then commands are
  * read from the terminal (with history, line editing and Tab completion).
+ * <pre>
+ * fshdb --listen [HOST:]PORT [--suspend] SCRIPT [ARGUMENTS...]
+ * </pre>
+ * runs the script in this console and lets a debugger attach over the Debug Adapter Protocol
+ * (parley-dap; see DapHost).
  */
 public class Fshdb {
 
@@ -47,10 +52,16 @@ public class Fshdb {
 
 	private static final String USAGE =
 			"Usage: fshdb [-e COMMAND]... [-x FILE] SCRIPT [ARGUMENTS...]\n"
+			+ "       fshdb --listen [HOST:]PORT [--suspend] SCRIPT [ARGUMENTS...]\n"
 			+ "Debug a shell script with fsh, in the terminal.\n"
 			+ "\n"
 			+ "  -e COMMAND   run a debugger command first (may be repeated), e.g. -e 'break 10' -e run\n"
 			+ "  -x FILE      run the debugger commands in FILE first\n"
+			+ "  --listen [HOST:]PORT\n"
+			+ "               run the script here and let a debugger attach over the Debug Adapter\n"
+			+ "               Protocol (DAP): VS Code, Eclipse (LSP4E) ... HOST defaults to 127.0.0.1;\n"
+			+ "               use 0.0.0.0 to accept debuggers from other machines\n"
+			+ "  --suspend    with --listen: wait for a debugger before the script starts\n"
 			+ "  -h, --help   show this help\n"
 			+ "  --version    show the version\n"
 			+ "\n"
@@ -71,6 +82,8 @@ public class Fshdb {
 
 	static int run(String[] args) throws IOException {
 		List<String> first = new ArrayList<>();
+		String listen = null;
+		boolean suspend = false;
 		int i = 0;
 		for(; i < args.length; i++) {
 			String a = args[i];
@@ -84,6 +97,10 @@ public class Fshdb {
 				first.add(args[++i]);
 			} else if( a.equals("-x") && i+1 < args.length) {
 				first.addAll(Files.readAllLines(Paths.get(args[++i]), StandardCharsets.UTF_8));
+			} else if( a.equals("--listen") && i+1 < args.length) {
+				listen = args[++i];
+			} else if( a.equals("--suspend")) {
+				suspend = true;
 			} else if( a.equals("--")) {
 				i++;
 				break;
@@ -106,6 +123,24 @@ public class Fshdb {
 				scriptArgs.append(' ');
 			}
 			scriptArgs.append(args[j]);
+		}
+
+		if( listen != null ) {
+			// the script has this console to itself; a debugger attaches over DAP
+			DebugEngine engine = new DebugEngine(script, System.in, System.out, System.err);
+			if( scriptArgs.length() > 0 ) {
+				engine.setArguments(scriptArgs.toString());
+			}
+			DapHost host = new DapHost(engine, DapHost.parseAddress(listen), suspend, System.err);
+			try {
+				return host.run();
+			} catch (InterruptedException e) {
+				return 1;
+			}
+		}
+		if( suspend ) {
+			System.err.println("fshdb: --suspend goes with --listen");
+			return 2;
 		}
 
 		Terminal terminal = TerminalBuilder.builder().system(true).nativeSignals(true)

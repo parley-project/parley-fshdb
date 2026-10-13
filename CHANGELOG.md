@@ -18,3 +18,11 @@ First version: a terminal debugger for shell scripts, built on fsh and fsh-ide's
 - fsh-ide's settings lines (#BjlIdeScriptArgs= ...) give the arguments and redirects; line
   numbers stay the file's.
 - One jar with everything (target/fshdb-<version>-all.jar) and a bin/fshdb launcher.
+- `--listen [HOST:]PORT [--suspend]`: run the script in this console and let a debugger attach
+  over the Debug Adapter Protocol (parley-dap): breakpoints with conditions and hit counts,
+  stepping, pause, call stack, variables, set variable, evaluate (variables only), detach and
+  re-attach.
+- `DebugEngine`: the run, breakpoints and stopped state, shared by the command line and the
+  DAP adapter.
+- Variables include the running functions' `local` ones (fsh's `ShellContext.getVariables()`
+  leaves them out, so they're looked up by the names the script sets).

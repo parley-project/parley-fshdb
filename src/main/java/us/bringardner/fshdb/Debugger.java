@@ -1,13 +1,13 @@
 /**
  *	Copyright 2026 Tony Bringardner
  *
- *	Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License.
+ *	Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. 
  *	You may obtain a copy of the License at
  *
  *	http://www.apache.org/licenses/LICENSE-2.0
  *
- *	Unless required by applicable law or agreed to in writing, software distributed under the License is distributed
- *	on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
+ *	Unless required by applicable law or agreed to in writing, software distributed under the License is distributed 
+ *	on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for 
  *	the specific language governing permissions and limitations under the License.
  */
 package us.bringardner.fshdb;
@@ -28,23 +28,20 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-import us.bringardner.fsh.ShellContext;
 import us.bringardner.fsh.ide.core.Breakpoint;
 import us.bringardner.fsh.ide.core.Completions;
-import us.bringardner.fsh.ide.core.DebugSession;
 import us.bringardner.fsh.ide.core.DebugVariables;
-import us.bringardner.fsh.ide.core.ScriptRun;
 import us.bringardner.fsh.ide.core.ScriptText;
 import us.bringardner.fsh.ide.core.Variable;
 
 /**
- * The command-line debugger: reads commands (break, run, next, print ...), runs the script with
- * fsh-ide's core (ScriptRun and a DebugSession) and reports where it stops.
+ * The command-line debugger: reads commands (break, run, next, print ...), has a DebugEngine
+ * run the script and reports where it stops.
  * <p>
  * Threads: commands are read and run on the thread that calls {@link #loop(CommandInput)}.
- * The script runs on its own thread; what it reports (stopped, finished) is queued and handled
- * by the command thread, which waits for it while the script runs. {@link #interrupt()} (Ctrl-C)
- * may be called on any thread.
+ * The script runs on its own thread; what the engine reports (stopped, ended) is queued and
+ * handled by the command thread, which waits for it while the script runs.
+ * {@link #interrupt()} (Ctrl-C) may be called on any thread.
  */
 public class Debugger {
 
@@ -52,33 +49,29 @@ public class Debugger {
 	/** A second Ctrl-C within this many ms of the first stops the script. */
 	static final long DOUBLE_INTERRUPT_MS = 2000;
 
-	// ---- what the script's thread reports
+	// ---- what the engine reports, handled on the command thread
 
 	private interface Event {
 	}
 
-	private static final class Paused implements Event {
-		final int line;
-		final ShellContext ctx;
-		final Map<String,Object> variables;
+	private static final class Stopped implements Event {
+		final int fileLine;
+		final Breakpoints.Entry breakpoint;
 
-		Paused(int line, ShellContext ctx, Map<String,Object> variables) {
-			this.line = line;
-			this.ctx = ctx;
-			this.variables = variables;
+		Stopped(int fileLine, Breakpoints.Entry breakpoint) {
+			this.fileLine = fileLine;
+			this.breakpoint = breakpoint;
 		}
 	}
 
-	private static final class Finished implements Event {
-		final ScriptRun run;
+	private static final class Ended implements Event {
 		final int exitCode;
-		final ShellContext ctx;
+		final boolean canceled;
 		final Exception error;
 
-		Finished(ScriptRun run, int exitCode, ShellContext ctx, Exception error) {
-			this.run = run;
+		Ended(int exitCode, boolean canceled, Exception error) {
 			this.exitCode = exitCode;
-			this.ctx = ctx;
+			this.canceled = canceled;
 			this.error = error;
 		}
 	}
@@ -111,30 +104,15 @@ public class Debugger {
 	// ---- state
 
 	private final PrintStream out;
-	private final InputStream scriptIn;
 	private final PrintStream scriptOut;
 	private final PrintStream scriptErr;
 	private final BlockingQueue<Event> events = new LinkedBlockingQueue<>();
-	private final ConsoleDebugSession session;
-	private ScriptFile script;
+	private final DebugEngine engine;
 	private final Breakpoints breakpoints;
 	private ExternalEditor editor = new ExternalEditor();
 
-	private String arguments = "";
-	private String stdIn = "";
-	private String stdOut = "";
-	private String stdErr = "";
-
-	private volatile ScriptRun run;
-	private volatile boolean debugging;
-	// set while the script is stopped (only on the command thread)
-	private volatile ShellContext pausedCtx;
-	private Map<String,Object> pausedVariables;
-	private int pausedFileLine = -1;
-	// the variables the last run ended with
-	private Map<String,Object> finalVariables;
-	private int lastExitCode;
-	private volatile boolean trace;
+	// true from starting or resuming the script until it's reported stopped or ended
+	private volatile boolean waiting;
 	private volatile long lastInterrupt;
 	private int listNext = 1;
 	private String lastCommand = "";
@@ -148,67 +126,60 @@ public class Debugger {
 	 * @param scriptIn, scriptOut, scriptErr the script's standard streams
 	 */
 	public Debugger(ScriptFile script, PrintStream out, InputStream scriptIn, PrintStream scriptOut, PrintStream scriptErr) {
-		this.script = script;
+		this(new DebugEngine(script, scriptIn, scriptOut, scriptErr), out, scriptOut, scriptErr);
+	}
+
+	public Debugger(DebugEngine engine, PrintStream out, PrintStream scriptOut, PrintStream scriptErr) {
+		this.engine = engine;
 		this.out = out;
-		this.scriptIn = scriptIn;
 		this.scriptOut = scriptOut;
 		this.scriptErr = scriptErr;
-		this.breakpoints = new Breakpoints(script);
-		this.session = new ConsoleDebugSession(breakpoints::forEditorLine, new DebugSession.Listener() {
+		this.breakpoints = engine.getBreakpoints();
+		engine.setListener(new DebugEngine.Listener() {
 			@Override
-			public void paused(int line, ShellContext ctx, Map<String, Object> variables) {
-				events.add(new Paused(line, ctx, variables));
+			public void stopped(DebugEngine.StopReason reason, int fileLine, Breakpoints.Entry breakpoint) {
+				events.add(new Stopped(fileLine, breakpoint));
 			}
 
 			@Override
-			public void statement(int line, String text) {
-				if( trace ) {
-					int fl = Debugger.this.script.fileLine(line);
-					Debugger.this.scriptErr.println("+ "+(fl > 0 ? fl : "?")+": "+text);
-					Debugger.this.scriptErr.flush();
-				}
+			public void ended(int exitCode, boolean canceled, Exception error) {
+				events.add(new Ended(exitCode, canceled, error));
 			}
 
 			@Override
-			public void conditionFailed(Breakpoint bp, int line, Exception error) {
-				Debugger.this.out.println("The condition of the breakpoint on line "+Debugger.this.script.fileLine(line)
+			public void conditionFailed(int fileLine, Exception error) {
+				Debugger.this.out.println("The condition of the breakpoint on line "+fileLine
 					+" failed ("+message(error)+"); stopping there.");
 				Debugger.this.out.flush();
 			}
 
 			@Override
-			public void resuming() {
-			}
-
-			@Override
-			public void terminateRequested() {
-				ScriptRun r = run;
-				if( r != null ) {
-					r.cancel();
-				}
+			public void statement(int fileLine, String text) {
+				Debugger.this.scriptErr.println("+ "+(fileLine > 0 ? fileLine : "?")+": "+text);
+				Debugger.this.scriptErr.flush();
 			}
 		});
-		useSettingsOf(script);
 		defineCommands();
-	}
-
-	private void useSettingsOf(ScriptFile s) {
-		arguments = s.document().arguments();
-		stdIn = s.document().stdIn();
-		stdOut = s.document().stdOut();
-		stdErr = s.document().stdErr();
 	}
 
 	void setEditor(ExternalEditor editor) {
 		this.editor = editor;
 	}
 
+	public DebugEngine getEngine() {
+		return engine;
+	}
+
 	public void setArguments(String arguments) {
-		this.arguments = arguments == null ? "" : arguments;
+		engine.setArguments(arguments);
 	}
 
 	public ScriptFile getScript() {
-		return script;
+		return engine.getScript();
+	}
+
+	private ScriptFile script() {
+		return engine.getScript();
 	}
 
 	public Breakpoints getBreakpoints() {
@@ -217,35 +188,39 @@ public class Debugger {
 
 	/** True while a run hasn't ended. */
 	public boolean isRunning() {
-		return run != null;
+		return engine.isRunning();
 	}
 
 	/** True while the script is stopped at a breakpoint or step. */
 	public boolean isPaused() {
-		return pausedCtx != null;
+		return engine.isPaused();
 	}
 
 	/** The exit code of the last run that ended (0 if none has). */
 	public int getLastExitCode() {
-		return lastExitCode;
+		return engine.getLastExitCode();
 	}
 
-	/** The variable names worth completing: the paused script's, else the ones the script sets. */
+	/** The variable names worth completing: the stopped script's (or last run's), and the ones the script sets. */
 	public Collection<String> variableNames() {
 		TreeSet<String> ret = new TreeSet<>();
-		Map<String,Object> v = pausedVariables != null ? pausedVariables : finalVariables;
+		Map<String,Object> v = engine.variables();
 		if( v != null ) {
 			for(Variable var : DebugVariables.list(v, false)) {
 				ret.add(var.getName());
 			}
 		}
-		ret.addAll(Completions.variables(script.code()));
+		ret.addAll(Completions.variables(script().code()));
 		return ret;
 	}
 
 	/** Command names, for completion. */
 	public Collection<String> commandNames() {
 		return new ArrayList<>(commands.keySet());
+	}
+
+	private static String terminalOr(String file) {
+		return file == null || file.isEmpty() ? "terminal" : file;
 	}
 
 	// ---- the loop
@@ -257,7 +232,7 @@ public class Debugger {
 	public int loop(CommandInput input) throws IOException {
 		this.input = input;
 		while( !quit ) {
-			if( run != null && pausedCtx == null ) {
+			if( waiting ) {
 				waitForScript();
 				continue;
 			}
@@ -270,10 +245,10 @@ public class Debugger {
 			}
 			execute(line);
 		}
-		if( run != null ) {
+		if( engine.isRunning()) {
 			stopRun();
 		}
-		return lastExitCode;
+		return engine.getLastExitCode();
 	}
 
 	/** Runs one command line (a blank line repeats a step, next, continue or list). */
@@ -327,7 +302,7 @@ public class Debugger {
 		return -1;
 	}
 
-	/** Waits until the script stops or ends, and reports it. */
+	/** Waits a little for the script to stop or end, and reports it. */
 	void waitForScript() {
 		try {
 			Event e = events.poll(250, TimeUnit.MILLISECONDS);
@@ -340,58 +315,36 @@ public class Debugger {
 	}
 
 	private void handle(Event e) {
-		if( e instanceof Paused ) {
-			Paused p = (Paused) e;
-			if( run == null ) {
-				return;
-			}
-			session.clearStepping();
-			pausedCtx = p.ctx;
-			pausedVariables = p.variables;
-			pausedFileLine = script.fileLine(p.line);
-			showStop(p.line);
-		} else if( e instanceof Finished ) {
-			Finished f = (Finished) e;
-			if( f.run != run ) {
-				return;
-			}
-			run = null;
-			pausedCtx = null;
-			pausedVariables = null;
-			pausedFileLine = -1;
+		if( e instanceof Stopped ) {
+			Stopped s = (Stopped) e;
+			waiting = false;
+			showStop(s.fileLine, s.breakpoint);
+		} else if( e instanceof Ended ) {
+			Ended f = (Ended) e;
+			waiting = false;
 			scriptOut.flush();
 			scriptErr.flush();
-			if( f.ctx != null ) {
-				try {
-					finalVariables = f.ctx.getVariables();
-				} catch (RuntimeException ex) {
-					finalVariables = null;
-				}
-			}
-			lastExitCode = f.exitCode;
 			if( f.error != null ) {
 				out.println("The script couldn't run: "+message(f.error));
 			}
-			out.println("[script "+(f.run.isCanceled() ? "stopped" : "ended")+", exit code "+f.exitCode+"]");
+			out.println("[script "+(f.canceled ? "stopped" : "ended")+", exit code "+f.exitCode+"]");
 		}
 	}
 
-	private void showStop(int editorLine) {
+	private void showStop(int fileLine, Breakpoints.Entry bp) {
 		scriptOut.flush();
 		scriptErr.flush();
-		int fl = script.fileLine(editorLine);
-		if( fl < 0 ) {
-			out.println("Stopped outside "+script.getPath()+" (a sourced file?)");
+		if( fileLine < 0 ) {
+			out.println("Stopped outside "+script().getPath()+" (a sourced file?)");
 			return;
 		}
-		Breakpoints.Entry bp = breakpoints.atFileLine(fl);
-		if( bp != null && bp.breakpoint.getLine() == editorLine ) {
-			out.println("Breakpoint "+bp.number+", line "+fl);
+		if( bp != null ) {
+			out.println("Breakpoint "+bp.number+", line "+fileLine);
 		} else {
-			out.println("Stopped at line "+fl);
+			out.println("Stopped at line "+fileLine);
 		}
-		printLine(fl);
-		listNext = fl+1;
+		printLine(fileLine);
+		listNext = fileLine+1;
 	}
 
 	// ---- Ctrl-C
@@ -402,25 +355,23 @@ public class Debugger {
 	 * @return true if there was a script to interrupt
 	 */
 	public boolean interrupt() {
-		ScriptRun r = run;
-		if( r == null ) {
+		if( !engine.isRunning()) {
 			return false;
 		}
-		if( pausedCtx != null || session.getCurrentState() == us.bringardner.fsh.DebugContext.RunState.AtBreakpoint ) {
-			// stopped already (and suspending would let it go on to the next statement)
+		if( engine.isPaused()) {
 			return true;
 		}
 		long now = System.currentTimeMillis();
-		if( debugging && now-lastInterrupt > DOUBLE_INTERRUPT_MS ) {
+		if( engine.isDebugging() && now-lastInterrupt > DOUBLE_INTERRUPT_MS ) {
 			lastInterrupt = now;
-			session.clearStepping();
-			session.suspend();
-			out.println();
-			out.println("[pausing at the next statement; Ctrl-C again to stop the script]");
+			if( engine.pause()) {
+				out.println();
+				out.println("[pausing at the next statement; Ctrl-C again to stop the script]");
+			}
 		} else {
 			out.println();
 			out.println("[stopping the script]");
-			r.cancel();
+			engine.kill();
 		}
 		out.flush();
 		return true;
@@ -429,76 +380,51 @@ public class Debugger {
 	// ---- running
 
 	private void start(boolean debug, boolean stopAtFirst, String args) {
-		if( run != null ) {
+		if( engine.isRunning()) {
 			out.println("The script is already running. Use kill to stop it first.");
 			return;
 		}
 		if( !args.isEmpty()) {
-			arguments = args;
+			engine.setArguments(args);
 		}
-		String code = script.code();
-		if( code.isBlank()) {
-			out.println(script.getPath()+" has no code to run.");
+		if( script().code().isBlank()) {
+			out.println(script().getPath()+" has no code to run.");
 			return;
 		}
-		breakpoints.resetForRun();
-		session.clearStepping();
-		session.setActive(debug);
-		session.setFirstLine(0);
-		session.setStopAtFirst(debug && stopAtFirst);
-		debugging = debug;
 		lastInterrupt = 0;
-		finalVariables = null;
 		events.clear();
-		ScriptRun r = new ScriptRun(code, (sr, exitCode, ctx, error)->events.add(new Finished(sr, exitCode, ctx, error)));
-		r.scriptName(script.scriptName())
-			.arguments(arguments)
-			.redirects(stdIn, stdOut, stdErr)
-			.console(scriptIn, scriptOut, scriptErr)
-			.debug(session);
-		run = r;
-		out.println((debug ? "Debugging " : "Running ")+script.getPath()+(arguments.isBlank() ? "" : " "+arguments));
+		String arguments = engine.getArguments();
+		out.println((debug ? "Debugging " : "Running ")+script().getPath()+(arguments.isBlank() ? "" : " "+arguments));
 		out.flush();
-		r.start();
-	}
-
-	private void requirePaused() {
-		if( run == null ) {
-			throw new IllegalStateException("The script isn't running.");
-		}
-		if( pausedCtx == null ) {
-			throw new IllegalStateException("The script isn't stopped.");
+		waiting = true;
+		try {
+			engine.start(debug, stopAtFirst);
+		} catch (RuntimeException e) {
+			waiting = false;
+			throw e;
 		}
 	}
 
-	/** The paused script goes on (continue, step ...): it's no longer stopped. */
-	private void resumed() {
-		pausedCtx = null;
-		pausedVariables = null;
+	/** Runs a resume (continue, step ...) of the stopped script; then waits for it. */
+	private void resume(Runnable r) {
+		r.run();
+		waiting = true;
 	}
 
 	private void stopRun() {
-		ScriptRun r = run;
-		if( r == null ) {
+		if( !engine.isRunning()) {
 			return;
 		}
-		r.cancel();
-		resumed();
-		try {
-			if( !r.join(5000)) {
-				out.println("The script didn't stop.");
-			}
-		} catch (InterruptedException e) {
-			// go on
+		// (until its end is reported, even if it was stopped at a breakpoint)
+		waiting = true;
+		if( !engine.killAndWait(5000)) {
+			out.println("The script didn't stop.");
 		}
-		// report its end
 		long until = System.currentTimeMillis()+2000;
-		while( run == r && System.currentTimeMillis() < until ) {
+		while( waiting && System.currentTimeMillis() < until ) {
 			waitForScript();
 		}
-		if( run == r ) {
-			run = null;
-		}
+		waiting = false;
 	}
 
 	// ---- commands
@@ -525,42 +451,26 @@ public class Debugger {
 				args -> start(false, false, args));
 		define("continue", "c cont", "continue",
 				"Lets the stopped script go on until a breakpoint or its end.",
-				args -> {
-					requirePaused();
-					resumed();
-					session.resume();
-				});
+				args -> resume(engine::resume));
 		define("step", "s", "step",
 				"Runs the current statement and stops at the next one, going into functions.",
-				args -> {
-					requirePaused();
-					resumed();
-					session.stepInto();
-				});
+				args -> resume(engine::step));
 		define("next", "n", "next",
 				"Runs the current statement and stops at the next one here, stepping over function calls.",
-				args -> {
-					requirePaused();
-					int depth = pausedCtx.callFrames.size();
-					resumed();
-					session.next(depth);
-				});
+				args -> resume(engine::next));
 		define("finish", "fin", "finish",
 				"Runs until the current function (or sourced file) returns.",
 				args -> {
-					requirePaused();
-					int depth = pausedCtx.callFrames.size();
-					if( depth == 0 ) {
+					if( !engine.finish()) {
 						out.println("Not in a function; use continue.");
 						return;
 					}
-					resumed();
-					session.finish(depth);
+					waiting = true;
 				});
 		define("kill", "k stop", "kill",
 				"Stops the script.",
 				args -> {
-					if( run == null ) {
+					if( !engine.isRunning()) {
 						out.println("The script isn't running.");
 						return;
 					}
@@ -585,7 +495,7 @@ public class Debugger {
 		define("clear", "", "clear LINE",
 				"Deletes the breakpoint on a line.",
 				args -> {
-					int line = lineArg(args, pausedFileLine);
+					int line = lineArg(args, engine.getPausedLine());
 					Breakpoints.Entry e = breakpoints.atFileLine(line);
 					if( e == null ) {
 						out.println("No breakpoint on line "+line+".");
@@ -630,7 +540,7 @@ public class Debugger {
 				"Shows the stopped script's variables. Without all, the ones inherited unchanged from the "
 				+ "environment and the shell's own defaults are left out.",
 				args -> {
-					Map<String,Object> v = variablesNow();
+					Map<String,Object> v = engine.variables();
 					if( v == null ) {
 						out.println("The script isn't stopped.");
 						return;
@@ -654,9 +564,9 @@ public class Debugger {
 				"Prints each statement as it runs (+ LINE: statement), while debugging.",
 				args -> {
 					if( !args.isEmpty()) {
-						trace = args.equalsIgnoreCase("on");
+						engine.setTrace(args.equalsIgnoreCase("on"));
 					}
-					out.println("Trace is "+(trace ? "on" : "off")+".");
+					out.println("Trace is "+(engine.isTrace() ? "on" : "off")+".");
 				});
 		define("edit", "e", "edit [LINE]",
 				"Edits the script with $VISUAL or $EDITOR (at LINE, default the current line), then reloads it.",
@@ -670,18 +580,14 @@ public class Debugger {
 					if( args.isEmpty()) {
 						throw new UsageException("Which script?");
 					}
-					if( run != null ) {
+					if( engine.isRunning()) {
 						out.println("The script is running. Use kill to stop it first.");
 						return;
 					}
 					ScriptFile f = new ScriptFile(args);
 					f.load();
-					script = f;
-					breakpoints.clear();
-					breakpoints.setScript(f);
-					useSettingsOf(f);
+					engine.setScript(f);
 					listNext = 1;
-					finalVariables = null;
 					out.println("Script "+f.getPath()+", "+f.lineCount()+" lines.");
 				});
 		define("help", "h ?", "help [COMMAND]",
@@ -690,7 +596,7 @@ public class Debugger {
 		define("quit", "q exit", "quit",
 				"Stops the script, if it's running, and leaves.",
 				args -> {
-					if( run != null ) {
+					if( engine.isRunning()) {
 						stopRun();
 					}
 					quit = true;
@@ -718,16 +624,16 @@ public class Debugger {
 				throw new UsageException("hits needs a number of 1 or more.");
 			}
 		}
-		int line = lineArg(rest, pausedFileLine);
-		if( line < 1 || line > script.lineCount()) {
-			out.println("Line "+line+" is not in the script ("+script.lineCount()+" lines).");
+		int line = lineArg(rest, engine.getPausedLine());
+		if( line < 1 || line > script().lineCount()) {
+			out.println("Line "+line+" is not in the script ("+script().lineCount()+" lines).");
 			return;
 		}
 		int at = line;
-		while( at <= script.lineCount() && !script.mayHaveCode(at)) {
+		while( at <= script().lineCount() && !script().mayHaveCode(at)) {
 			at++;
 		}
-		if( at > script.lineCount()) {
+		if( at > script().lineCount()) {
 			out.println("There's no code on or after line "+line+".");
 			return;
 		}
@@ -804,14 +710,15 @@ public class Debugger {
 						cond.toString().trim()));
 			}
 		} else if( "args".startsWith(what) && what.startsWith("a")) {
+			String arguments = engine.getArguments();
 			out.println(arguments.isBlank() ? "No arguments." : "Arguments: "+arguments);
 		} else if( "redirects".startsWith(what) && what.startsWith("r")) {
-			out.println("stdin:  "+(stdIn.isEmpty() ? "terminal" : stdIn));
-			out.println("stdout: "+(stdOut.isEmpty() ? "terminal" : stdOut));
-			out.println("stderr: "+(stdErr.isEmpty() ? "terminal" : stdErr));
+			out.println("stdin:  "+terminalOr(engine.getStdIn()));
+			out.println("stdout: "+terminalOr(engine.getStdOut()));
+			out.println("stderr: "+terminalOr(engine.getStdErr()));
 		} else if( "script".startsWith(what) && what.startsWith("s")) {
-			out.println(script.scriptName()+", "+script.lineCount()+" lines"
-				+(run == null ? "" : pausedCtx != null ? ", stopped at line "+pausedFileLine : ", running"));
+			out.println(script().scriptName()+", "+script().lineCount()+" lines"
+				+(!engine.isRunning() ? "" : engine.isPaused() ? ", stopped at line "+engine.getPausedLine() : ", running"));
 		} else {
 			throw new UsageException("info what?");
 		}
@@ -832,21 +739,21 @@ public class Debugger {
 			int center = number(a);
 			first = Math.max(1, center-5);
 			last = first+9;
-		} else if( previousCommand.equals("list") && listNext <= script.lineCount() ) {
+		} else if( previousCommand.equals("list") && listNext <= script().lineCount() ) {
 			first = listNext;
 			last = first+9;
-		} else if( pausedFileLine > 0 ) {
-			first = Math.max(1, pausedFileLine-5);
+		} else if( engine.getPausedLine() > 0 ) {
+			first = Math.max(1, engine.getPausedLine()-5);
 			last = first+9;
 		} else {
 			first = listNext;
 			last = first+9;
 		}
-		if( first > script.lineCount()) {
-			out.println("Line "+first+" is past the end ("+script.lineCount()+" lines).");
+		if( first > script().lineCount()) {
+			out.println("Line "+first+" is past the end ("+script().lineCount()+" lines).");
 			return;
 		}
-		last = Math.min(last, script.lineCount());
+		last = Math.min(last, script().lineCount());
 		for(int l=first; l <= last; l++) {
 			printLine(l);
 		}
@@ -854,75 +761,29 @@ public class Debugger {
 	}
 
 	private void printLine(int fileLine) {
-		String text = script.line(fileLine);
+		String text = script().line(fileLine);
 		if( text == null ) {
 			return;
 		}
 		Breakpoints.Entry bp = breakpoints.atFileLine(fileLine);
 		char b = bp == null ? ' ' : bp.breakpoint.isEnabled(false) ? '*' : 'o';
-		char cur = fileLine == pausedFileLine && pausedCtx != null ? '>' : ' ';
-		int width = Math.max(3, String.valueOf(script.lineCount()).length());
+		char cur = fileLine == engine.getPausedLine() ? '>' : ' ';
+		int width = Math.max(3, String.valueOf(script().lineCount()).length());
 		out.println(String.format("%"+width+"d %c%c %s", fileLine, b, cur, text));
-	}
-
-	/** The stopped script's variables as they are now (they may have been set), or its final ones. */
-	private Map<String,Object> variablesNow() {
-		if( pausedCtx != null ) {
-			try {
-				return pausedCtx.getVariables();
-			} catch (RuntimeException e) {
-				return pausedVariables;
-			}
-		}
-		return run == null ? finalVariables : null;
 	}
 
 	private void print(String args) {
 		if( args.isEmpty()) {
 			throw new UsageException("Print what?");
 		}
-		Map<String,Object> vars = variablesNow();
-		if( vars == null ) {
-			out.println(run == null ? "The script hasn't run yet." : "The script isn't stopped.");
+		if( !engine.hasVariables()) {
+			out.println(engine.isRunning() ? "The script isn't stopped." : "The script hasn't run yet.");
 			return;
 		}
 		for(String name : args.split("\\s+")) {
-			String key = name;
-			Object value;
-			if( key.startsWith("${") && key.endsWith("}")) {
-				key = key.substring(2, key.length()-1);
-			} else if( key.startsWith("$") && key.length() > 1 && !Character.isDigit(key.charAt(1))
-					&& key.charAt(1) != '@' && key.charAt(1) != '*' && key.charAt(1) != '#') {
-				key = key.substring(1);
-			}
-			if( key.equals("$@") || key.equals("@") || key.equals("$*") || key.equals("*")) {
-				value = positional(vars);
-			} else if( key.equals("$#") || key.equals("#")) {
-				value = positional(vars).size();
-			} else if( vars.containsKey(key)) {
-				value = vars.get(key);
-			} else if( key.matches("\\d+") && vars.containsKey("$"+key)) {
-				value = vars.get("$"+key);
-			} else if( pausedCtx != null ) {
-				// a dynamic one: LINENO, RANDOM, SECONDS ...
-				try {
-					value = pausedCtx.getVariable(key);
-				} catch (RuntimeException e) {
-					value = null;
-				}
-			} else {
-				value = null;
-			}
+			Object value = engine.variable(name);
 			out.println(name+" = "+(value == null ? "(not set)" : format(value)));
 		}
-	}
-
-	private static List<Object> positional(Map<String,Object> vars) {
-		List<Object> ret = new ArrayList<>();
-		for(int i=1; vars.containsKey("$"+i); i++) {
-			ret.add(vars.get("$"+i));
-		}
-		return ret;
 	}
 
 	/** A value as bash's declare -p would show it, roughly: arrays as (a b c). */
@@ -982,19 +843,19 @@ public class Debugger {
 		String rest = sp < 0 ? "" : args.substring(sp+1).trim();
 		switch (first) {
 		case "args":
-			arguments = rest;
+			engine.setArguments(rest);
 			out.println(rest.isEmpty() ? "No arguments." : "Arguments: "+rest);
 			return;
 		case "stdin":
-			stdIn = rest;
+			engine.setRedirects(rest, null, null);
 			out.println("stdin: "+(rest.isEmpty() ? "terminal" : rest));
 			return;
 		case "stdout":
-			stdOut = rest;
+			engine.setRedirects(null, rest, null);
 			out.println("stdout: "+(rest.isEmpty() ? "terminal" : rest));
 			return;
 		case "stderr":
-			stdErr = rest;
+			engine.setRedirects(null, null, rest);
 			out.println("stderr: "+(rest.isEmpty() ? "terminal" : rest));
 			return;
 		case "var":
@@ -1017,13 +878,7 @@ public class Debugger {
 			value = args.substring(s+1).trim();
 		}
 		value = unquote(value);
-		requirePaused();
-		if( name.matches("\\$?\\d+")) {
-			name = name.startsWith("$") ? name : "$"+name;
-		} else if( name.startsWith("$")) {
-			name = name.substring(1);
-		}
-		DebugVariables.set(pausedCtx, name, value);
+		name = engine.setVariable(name, value);
 		out.println(name+" = "+format(value));
 	}
 
@@ -1035,31 +890,22 @@ public class Debugger {
 	}
 
 	private void where() {
-		requirePaused();
-		List<String[]> frames = new ArrayList<>(pausedCtx.callFrames);
-		String me = script.scriptName();
-		String current = frames.isEmpty() ? "main" : frames.get(frames.size()-1)[0];
-		out.println("#0  line "+pausedFileLine+" in "+current);
-		int n = 1;
-		for(int i=frames.size()-1; i >= 0; i--, n++) {
-			String[] f = frames.get(i);
-			String caller = i > 0 ? frames.get(i-1)[0] : "main";
-			String from = f.length > 2 ? f[2] : "?";
-			String where;
-			// the line it was called from is in the file that called it: the previous frame's
-			String file = i > 0 ? frames.get(i-1)[1] : me;
-			if( me.equals(file) && from.matches("\\d+")) {
-				int fl = script.fileLine(session.editorLine(Integer.parseInt(from)));
-				where = "line "+(fl > 0 ? fl : from);
-			} else {
-				where = file+":"+from;
-			}
-			out.println("#"+n+"  "+where+" in "+caller+("source".equals(f[0]) ? " (sourcing "+f[1]+")" : " (calling "+f[0]+")"));
+		if( !engine.isPaused()) {
+			throw new IllegalStateException(engine.isRunning() ? "The script isn't stopped." : "The script isn't running.");
+		}
+		int n = 0;
+		for(DebugEngine.Frame f : engine.frames()) {
+			String where = f.inScript || n == 0 ? "line "+f.line : f.file+":"+f.line;
+			String calls = f.calls == null ? "" : f.calls.startsWith("source ")
+					? " (sourcing "+f.calls.substring(7)+")" : " (calling "+f.calls+")";
+			out.println("#"+n+"  "+where+" in "+f.name+calls);
+			n++;
 		}
 	}
 
 	private void edit(String args) throws IOException {
-		int line = args.isEmpty() ? (pausedFileLine > 0 ? pausedFileLine : Math.max(1, listNext-1)) : number(args.trim());
+		ScriptFile script = script();
+		int line = args.isEmpty() ? (engine.getPausedLine() > 0 ? engine.getPausedLine() : Math.max(1, listNext-1)) : number(args.trim());
 		File local = script.localFile();
 		File toEdit = local;
 		String before = null;
@@ -1103,15 +949,15 @@ public class Debugger {
 	}
 
 	private void reload() throws IOException {
-		script.load();
-		breakpoints.setScript(script);
+		engine.reload();
+		ScriptFile script = script();
 		for(Breakpoints.Entry e : breakpoints.list()) {
-			if( !script.mayHaveCode(e.fileLine)) {
+			if( !script().mayHaveCode(e.fileLine)) {
 				out.println("Breakpoint "+e.number+" is on line "+e.fileLine+", which has no code now.");
 			}
 		}
-		out.println("Reloaded "+script.getPath()+", "+script.lineCount()+" lines."
-				+(run != null ? " The running script still has the old code; run it again to use the new." : ""));
+		out.println("Reloaded "+script.getPath()+", "+script().lineCount()+" lines."
+				+(engine.isRunning() ? " The running script still has the old code; run it again to use the new." : ""));
 	}
 
 	private void help(String args) {
