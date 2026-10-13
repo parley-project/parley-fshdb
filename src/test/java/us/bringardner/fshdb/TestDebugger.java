@@ -257,17 +257,45 @@ public class TestDebugger {
 	}
 
 	@Test
-	public void settingsLinesKeepFileLineNumbers() {
-		// fsh-ide keeps a script's arguments in a comment line, which isn't run
+	public void settingsLinesOfAnEarlierFshIdeKeepFileLineNumbers() {
+		// an earlier fsh-ide kept a script's arguments in a comment line: read, and run as a blank line
 		String text = "#BjlIdeScriptArgs=alpha beta\n"
 				+ "x=1\n"
-				+ "echo \"args $*\"\n";
+				+ "echo \"args $* line $LINENO\"\n";
 		Session s = new Session(text);
 		String out = s.run("break 3", "info args", "run", "list 3", "continue");
-		assertEquals(Arrays.asList(3), stops(out));
+		assertEquals(Arrays.asList(3), stops(out), out);
 		assertTrue(out.contains("Arguments: alpha beta"), out);
-		assertTrue(out.contains("  3 *> echo \"args $*\""), out);
-		assertTrue(out.contains("args alpha beta"), out);
+		assertTrue(out.contains("  3 *> echo \"args $* line $LINENO\""), out);
+		assertTrue(out.contains("args alpha beta line 3"), out);
+	}
+
+	@Test
+	public void runsWithTheArgumentsFshIdeKeepsForTheScript() throws Exception {
+		java.nio.file.Path dir = Files.createTempDirectory("fshdb-settings");
+		try {
+			File script = dir.resolve("kept.sh").toFile();
+			Files.write(script.toPath(), "echo \"args $*\" >&2\necho out\n".getBytes(StandardCharsets.UTF_8));
+			us.bringardner.fsh.ide.core.RunSettingsStore store = new us.bringardner.fsh.ide.core.RunSettingsStore(
+					dir.resolve("run-settings").toFile());
+			File outFile = dir.resolve("out.txt").toFile();
+			store.put(script.getCanonicalPath(), new us.bringardner.fsh.ide.core.RunSettings("one two", "", outFile.getPath(), ""));
+			ScriptFile f = new ScriptFile(script.getPath(), store);
+			f.load();
+			Session s = new Session(f, "");
+			String out = s.run("info args", "info redirects", "run");
+			assertTrue(out.contains("Arguments: one two"), out);
+			assertTrue(out.contains("stdout: "+outFile.getPath()), out);
+			assertTrue(out.contains("args one two"), out);
+			assertEquals("out\n", new String(Files.readAllBytes(outFile.toPath()), StandardCharsets.UTF_8));
+			// and the script's own text runs as it is
+			assertFalse(f.code().contains("Bjl"));
+		} finally {
+			for(File x : dir.toFile().listFiles()) {
+				x.delete();
+			}
+			dir.toFile().delete();
+		}
 	}
 
 	@Test

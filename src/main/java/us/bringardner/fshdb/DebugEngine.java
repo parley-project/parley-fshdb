@@ -25,6 +25,7 @@ import us.bringardner.fsh.ShellContext;
 import us.bringardner.fsh.ide.core.Breakpoint;
 import us.bringardner.fsh.ide.core.DebugSession;
 import us.bringardner.fsh.ide.core.DebugVariables;
+import us.bringardner.fsh.ide.core.RunSettings;
 import us.bringardner.fsh.ide.core.ScriptRun;
 
 /**
@@ -184,12 +185,13 @@ public class DebugEngine implements DebugTarget {
 		this.listener = listener;
 	}
 
-	/** Arguments and redirects from the script's fsh-ide settings lines. */
+	/** The arguments and redirects the script is run with: the ones fsh-ide keeps for it (see ScriptFile.settings). */
 	public void useSettingsOf(ScriptFile s) {
-		arguments = s.document().arguments();
-		stdIn = s.document().stdIn();
-		stdOut = s.document().stdOut();
-		stdErr = s.document().stdErr();
+		RunSettings r = s.settings();
+		arguments = r.arguments();
+		stdIn = r.stdIn();
+		stdOut = r.stdOut();
+		stdErr = r.stdErr();
 	}
 
 	public ScriptFile getScript() {

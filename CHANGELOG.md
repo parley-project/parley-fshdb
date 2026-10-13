@@ -15,8 +15,10 @@ First version: a terminal debugger for shell scripts, built on fsh and fsh-ide's
   copy and written back).
 - JLine 3 command line: history in ~/.fshdb_history, Tab completion, Ctrl-C pauses the script
   (twice stops it). -e and -x run commands first; commands can also come from standard input.
-- fsh-ide's settings lines (#BjlIdeScriptArgs= ...) give the arguments and redirects; line
-  numbers stay the file's.
+- The arguments and redirects fsh-ide keeps for a script (`~/.fsh-ide/run-settings`) are used,
+  or the settings lines of a script saved by an earlier fsh-ide (#BjlIdeScriptArgs= ...), which
+  run as blank lines. The script runs as it is in its file, so line numbers and `$LINENO` are
+  the file's.
 - One jar with everything (target/fshdb-<version>-all.jar) and a bin/fshdb launcher.
 - `--listen [HOST:]PORT [--suspend]`: run the script in this console and let a debugger attach
   over the Debug Adapter Protocol (parley-dap): breakpoints with conditions and hit counts,
