@@ -207,7 +207,6 @@ public class DebugEngine {
 	/** Reads the script's file again; breakpoints stay on their line numbers. */
 	public void reload() throws IOException {
 		script.load();
-		scriptNames = null;
 		breakpoints.setScript(script);
 	}
 
@@ -495,38 +494,13 @@ public class DebugEngine {
 		ShellContext ctx = pausedCtx;
 		if( ctx != null ) {
 			try {
-				Map<String,Object> ret = new java.util.TreeMap<>(ctx.getVariables());
-				// ShellContext.getVariables() leaves out the running functions' local variables;
-				// look up the names the script sets (local who=$1, read x, for i in ...) one by one
-				for(String name : scriptNames()) {
-					if( !ret.containsKey(name)) {
-						Object v = ctx.getVariable(name);
-						if( v != null ) {
-							ret.put(name, v);
-						}
-					}
-				}
-				return ret;
+				// includes the running functions' local variables
+				return new java.util.TreeMap<>(ctx.getVariables());
 			} catch (RuntimeException e) {
 				return pausedVariables;
 			}
 		}
 		return run == null ? finalVariables : null;
-	}
-
-	// the variable names the script sets, worked out once per script
-	private volatile List<String> scriptNames;
-	private volatile ScriptFile scriptNamesOf;
-
-	private List<String> scriptNames() {
-		ScriptFile s = script;
-		List<String> names = scriptNames;
-		if( names == null || scriptNamesOf != s ) {
-			names = us.bringardner.fsh.ide.core.Completions.variables(s.code());
-			scriptNames = names;
-			scriptNamesOf = s;
-		}
-		return names;
 	}
 
 	/** True if variable() has variables to look in (stopped, or a run has ended). */
