@@ -78,9 +78,11 @@ SCRIPT can be a local file or a URL a parley-files file system understands
 (`sftp://user@host/home/me/job.sh`, `ftp://...`). `edit` on a remote script edits a local copy
 and writes it back.
 
-Scripts saved by fsh-ide keep their arguments and redirects in comment lines
-(`#BjlIdeScriptArgs=` ...); fshdb uses them and doesn't count them as code, but line numbers are
-always the file's, as your editor shows them.
+A script is run with the arguments and redirects fsh-ide keeps for it (in
+`~/.fsh-ide/run-settings`); arguments on fshdb's command line, and `set args`, replace them for
+fshdb only. A script saved by an earlier fsh-ide may still carry them in comment lines
+(`#BjlIdeScriptArgs=` ...): fshdb reads those and runs them as blank lines. The script runs as it
+is in its file, so line numbers, `$LINENO` and fsh's messages are always the file's.
 
 ## Attaching a debugger (DAP)
 

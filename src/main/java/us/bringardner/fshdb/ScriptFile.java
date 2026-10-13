@@ -17,6 +17,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import us.bringardner.fsh.ide.core.RunSettings;
+import us.bringardner.fsh.ide.core.RunSettingsStore;
 import us.bringardner.fsh.ide.core.ScriptDocument;
 import us.bringardner.fsh.ide.core.ScriptText;
 import us.bringardner.parley.files.FileSource;
@@ -24,31 +26,42 @@ import us.bringardner.parley.files.FileSourceFactory;
 import us.bringardner.parley.files.fileproxy.FileProxyFactory;
 
 /**
- * The script being debugged, as it is in its file.
+ * The script being debugged, as it is in its file, and the arguments and redirects it's run
+ * with.
  * <p>
- * Line numbers shown to the user are the file's (1-based), as an editor shows them. The code
- * that runs is the file without the fsh-ide settings lines (#BjlIdeScriptArgs= and so on, see
- * ScriptDocument); fsh-ide's core numbers that code's lines from 0 ("editor lines"). This class
- * maps between the two.
+ * Line numbers are the file's (1-based), as an editor shows them, and the code that runs is
+ * the file as it is, so $LINENO and fsh's messages agree with them too. A script saved by an
+ * earlier fsh-ide still has its settings in comment lines (#BjlIdeScriptArgs= and so on, see
+ * ScriptDocument): they're read for the settings and run as blank lines. fsh-ide's core numbers
+ * lines from 0 ("editor lines"); here that's the file line less one.
+ * <p>
+ * The settings come from those lines if the script has them, else from the user's run
+ * settings, which fsh-ide keeps (RunSettingsStore). fshdb only reads them.
  */
 public class ScriptFile {
 
 	private final String path;
 	private final FileSource file;
-	private ScriptDocument document = new ScriptDocument("", "", "", "", "");
+	private RunSettings settings = RunSettings.NONE;
+	// where the settings are read from; null: the user's
+	private final RunSettingsStore store;
 	// the file's lines, without their line ends
 	private List<String> lines = Collections.emptyList();
-	// editor line (index) -> file line (1-based)
-	private int [] fileLineOf = new int[0];
-	// file line (index, 1-based) -> editor line, or -1 for a settings line
-	private int [] editorLineOf = new int[1];
+	// what runs: the text with any settings lines blanked
+	private String code = "";
 
 	/**
 	 * @param path a file name, or a path or URL any parley-files file system understands
 	 *        (sftp://host/dir/script.sh ...)
 	 */
 	public ScriptFile(String path) throws IOException {
+		this(path, (RunSettingsStore) null);
+	}
+
+	/** @param store the run settings to read (null: the user's) */
+	ScriptFile(String path, RunSettingsStore store) throws IOException {
 		this.path = path;
+		this.store = store;
 		this.file = path.matches("[a-zA-Z][a-zA-Z0-9+.-]+://.*") ? FileSourceFactory.getFileSource(path)
 				: FileSourceFactory.getDefaultFactory().createFileSource(path);
 		if( file == null ) {
@@ -60,6 +73,7 @@ public class ScriptFile {
 	ScriptFile(String name, String text) {
 		this.path = name;
 		this.file = null;
+		this.store = null;
 		setText(text);
 	}
 
@@ -76,7 +90,6 @@ public class ScriptFile {
 
 	final void setText(String text) {
 		text = text.replace("\r\n", "\n");
-		document = ScriptDocument.parse(text);
 		List<String> all = new ArrayList<>();
 		for(String line : text.split("\n", -1)) {
 			all.add(line);
@@ -86,27 +99,29 @@ public class ScriptFile {
 			all.remove(all.size()-1);
 		}
 		lines = all;
-		editorLineOf = new int[all.size()+1];
-		editorLineOf[0] = -1;
-		List<Integer> body = new ArrayList<>();
-		for(int i=0; i < all.size(); i++) {
-			if( isSettingsLine(all.get(i))) {
-				editorLineOf[i+1] = -1;
-			} else {
-				editorLineOf[i+1] = body.size();
-				body.add(i+1);
+		// settings lines of an earlier fsh-ide run as blank lines, so every line keeps its number
+		StringBuilder run = new StringBuilder(text.length());
+		for(String line : all) {
+			if( !ScriptDocument.isLegacySettingsLine(line)) {
+				run.append(line);
 			}
+			run.append('\n');
 		}
-		fileLineOf = new int[body.size()];
-		for(int i=0; i < fileLineOf.length; i++) {
-			fileLineOf[i] = body.get(i);
-		}
+		code = ScriptText.clean(run.toString());
+		settings = settingsFor(ScriptDocument.parse(text));
 	}
 
-	private static boolean isSettingsLine(String line) {
-		// as ScriptDocument.parse recognizes them
-		return line.startsWith("#BjlIdeScriptArgs=") || line.startsWith("#BjlIdeScriptIn=")
-				|| line.startsWith("#BjlIdeScriptOut=") || line.startsWith("#BjlIdeScriptErr=");
+	/** The script's settings lines if it has any, else what the user's store keeps for its file. */
+	private RunSettings settingsFor(ScriptDocument doc) {
+		if( doc.hasLegacySettings() || file == null ) {
+			return doc.settings();
+		}
+		try {
+			return (store != null ? store : RunSettingsStore.forUser()).get(file);
+		} catch (IOException | RuntimeException e) {
+			// run without them rather than not at all
+			return RunSettings.NONE;
+		}
 	}
 
 	/** The name given on the command line. */
@@ -132,13 +147,14 @@ public class ScriptFile {
 		return file == null ? path : file.getAbsolutePath();
 	}
 
-	/** The code to run: the file without its settings lines. */
+	/** The code to run: the file, line for line (any settings lines of an earlier fsh-ide are blank). */
 	public String code() {
-		return ScriptText.clean(document.body());
+		return code;
 	}
 
-	public ScriptDocument document() {
-		return document;
+	/** The arguments and redirects to run it with (from the user's run settings, or its settings lines). */
+	public RunSettings settings() {
+		return settings;
 	}
 
 	public int lineCount() {
@@ -152,18 +168,18 @@ public class ScriptFile {
 
 	/** The file line (1-based) of an editor line (0-based), or -1 if it isn't in this file. */
 	public int fileLine(int editorLine) {
-		return editorLine >= 0 && editorLine < fileLineOf.length ? fileLineOf[editorLine] : -1;
+		return editorLine >= 0 && editorLine < lines.size() ? editorLine+1 : -1;
 	}
 
-	/** The editor line (0-based) of a file line (1-based), or -1 for a settings line or no line. */
+	/** The editor line (0-based) of a file line (1-based), or -1 if there's no such line. */
 	public int editorLine(int fileLine) {
-		return fileLine >= 1 && fileLine < editorLineOf.length ? editorLineOf[fileLine] : -1;
+		return fileLine >= 1 && fileLine <= lines.size() ? fileLine-1 : -1;
 	}
 
-	/** True if a statement could start on the line: not blank, not only a comment, not settings. */
+	/** True if a statement could start on the line: not blank, not only a comment (settings lines are comments). */
 	public boolean mayHaveCode(int fileLine) {
 		String l = line(fileLine);
-		if( l == null || editorLine(fileLine) < 0 ) {
+		if( l == null ) {
 			return false;
 		}
 		String t = l.trim();
