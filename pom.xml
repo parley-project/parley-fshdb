@@ -1,0 +1,180 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<!-- fshdb: run and debug shell scripts in a terminal, using fsh as the interpreter -->
+	<groupId>us.bringardner</groupId>
+	<artifactId>fshdb</artifactId>
+	<version>1.0.0-SNAPSHOT</version>
+	<name>fshdb - console debugger for shell scripts</name>
+	<description>Runs and debugs bash/POSIX-style scripts in a terminal (no Swing or JavaFX), using
+		fsh (the FileSource Shell) as the interpreter and fsh-ide's UI-free core for running and
+		debugging. Scripts are edited with $EDITOR.</description>
+	<url>https://github.com/tony-bringardner/fshdb</url>
+	<inceptionYear>2026</inceptionYear>
+
+	<licenses>
+		<license>
+			<name>The Apache License, Version 2.0</name>
+			<url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
+	<developers>
+		<developer>
+			<id>tony-bringardner</id>
+			<name>Tony Bringardner</name>
+			<url>https://github.com/tony-bringardner</url>
+		</developer>
+	</developers>
+
+	<properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<maven.compiler.release>11</maven.compiler.release>
+		<fsh.version>1.0.0-SNAPSHOT</fsh.version>
+		<fsh-ide.version>1.0.0-SNAPSHOT</fsh-ide.version>
+		<jline.version>3.30.17</jline.version>
+	</properties>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<version>3.4.2</version>
+				<configuration>
+					<archive>
+						<manifestEntries>
+							<Automatic-Module-Name>us.bringardner.fshdb</Automatic-Module-Name>
+						</manifestEntries>
+						<manifest>
+							<mainClass>us.bringardner.fshdb.Fshdb</mainClass>
+							<addClasspath>true</addClasspath>
+						</manifest>
+					</archive>
+				</configuration>
+			</plugin>
+			<plugin>
+				<!-- target/fshdb-<version>-all.jar: one jar to copy to a server (java -jar) -->
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-shade-plugin</artifactId>
+				<version>3.6.0</version>
+				<executions>
+					<execution>
+						<phase>package</phase>
+						<goals>
+							<goal>shade</goal>
+						</goals>
+						<configuration>
+							<shadedArtifactAttached>true</shadedArtifactAttached>
+							<shadedClassifierName>all</shadedClassifierName>
+							<createDependencyReducedPom>false</createDependencyReducedPom>
+							<filters>
+								<filter>
+									<artifact>*:*</artifact>
+									<excludes>
+										<exclude>META-INF/*.SF</exclude>
+										<exclude>META-INF/*.DSA</exclude>
+										<exclude>META-INF/*.RSA</exclude>
+										<exclude>module-info.class</exclude>
+										<exclude>META-INF/versions/*/module-info.class</exclude>
+									</excludes>
+								</filter>
+							</filters>
+							<transformers>
+								<transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+								<transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+									<mainClass>us.bringardner.fshdb.Fshdb</mainClass>
+									<manifestEntries>
+										<Multi-Release>true</Multi-Release>
+									</manifestEntries>
+								</transformer>
+							</transformers>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+		<pluginManagement>
+			<plugins>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-compiler-plugin</artifactId>
+					<version>3.13.0</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-surefire-plugin</artifactId>
+					<version>3.5.2</version>
+				</plugin>
+			</plugins>
+		</pluginManagement>
+	</build>
+
+	<dependencies>
+		<!-- The interpreter. Brings parley-files and its FTP and SFTP file systems. -->
+		<dependency>
+			<groupId>us.bringardner</groupId>
+			<artifactId>fsh</artifactId>
+			<version>${fsh.version}</version>
+		</dependency>
+		<!--
+			Running and debugging: fsh-ide's UI-free core (us.bringardner.fsh.ide.core). The
+			Swing and JavaFX front ends' libraries are left out; the classes that use them are
+			never loaded here.
+		-->
+		<dependency>
+			<groupId>us.bringardner</groupId>
+			<artifactId>fsh-ide</artifactId>
+			<version>${fsh-ide.version}</version>
+			<exclusions>
+				<exclusion>
+					<groupId>us.bringardner.parley</groupId>
+					<artifactId>parley-files-swing</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>us.bringardner.parley</groupId>
+					<artifactId>parley-files-fx</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>com.fifesoft</groupId>
+					<artifactId>*</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>org.openjfx</groupId>
+					<artifactId>*</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>org.fxmisc.richtext</groupId>
+					<artifactId>*</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>org.abego.treelayout</groupId>
+					<artifactId>*</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>jakarta.xml.bind</groupId>
+					<artifactId>*</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>com.sun.xml.bind</groupId>
+					<artifactId>*</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<!-- The command line: history, editing, completion, Ctrl-C -->
+		<dependency>
+			<groupId>org.jline</groupId>
+			<artifactId>jline</artifactId>
+			<version>${jline.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<version>5.11.4</version>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+</project>
