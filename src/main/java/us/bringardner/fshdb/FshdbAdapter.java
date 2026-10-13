@@ -38,6 +38,8 @@ import us.bringardner.parley.dap.protocol.IDebugAdapter;
 import us.bringardner.parley.dap.protocol.IDebugClient;
 import us.bringardner.parley.dap.protocol.InitializeRequestArguments;
 import us.bringardner.parley.dap.protocol.LaunchRequestArguments;
+import us.bringardner.parley.dap.protocol.LoadedSourcesArguments;
+import us.bringardner.parley.dap.protocol.LoadedSourcesResponseBody;
 import us.bringardner.parley.dap.protocol.NextArguments;
 import us.bringardner.parley.dap.protocol.OutputEventBody;
 import us.bringardner.parley.dap.protocol.PauseArguments;
@@ -84,8 +86,11 @@ public class FshdbAdapter implements IDebugAdapter {
 
 	/** What the adapter needs from its host (DapHost). */
 	public interface Host {
-		/** configurationDone: a script waiting for a debugger (--suspend) may start. */
-		void configured();
+		/**
+		 * configurationDone: a script waiting for a debugger (--suspend) may start.
+		 * @param stopOnEntry stop before its first statement (launch or attach asked for it)
+		 */
+		void configured(boolean stopOnEntry);
 
 		/** The debugger disconnected: close the connection. */
 		void disconnected(FshdbAdapter adapter);
@@ -96,6 +101,7 @@ public class FshdbAdapter implements IDebugAdapter {
 	private final IDebugClient client;
 	private volatile boolean connected = true;
 	private volatile boolean linesStartAt1 = true;
+	private volatile boolean stopOnEntry;
 
 	// variable references, valid while the script is stopped (cleared when it goes on)
 	private final Map<Integer,Supplier<List<Variable>>> references = new ConcurrentHashMap<>();
@@ -191,6 +197,7 @@ public class FshdbAdapter implements IDebugAdapter {
 				.setSupportsSetVariable(true)
 				.setSupportsEvaluateForHovers(true)
 				.setSupportsTerminateRequest(true)
+				.setSupportsLoadedSourcesRequest(true)
 				.setSupportTerminateDebuggee(true));
 	}
 
@@ -204,8 +211,12 @@ public class FshdbAdapter implements IDebugAdapter {
 		return start(args == null ? null : args.getExtra());
 	}
 
-	/** launch and attach: the script is fshdb's; it's running, or waits for configurationDone. */
+	/**
+	 * launch and attach: the script is fshdb's; it's running, or waits for configurationDone.
+	 * "stopOnEntry": true stops a waiting script before its first statement.
+	 */
 	private CompletableFuture<Void> start(Map<String,Object> config) {
+		stopOnEntry = config != null && Boolean.TRUE.equals(config.get("stopOnEntry"));
 		Object program = config == null ? null : config.get("program");
 		if( program instanceof String && !sameFile((String) program)) {
 			output("fshdb is debugging "+engine.getScript().scriptName()+", not "+program);
@@ -216,7 +227,7 @@ public class FshdbAdapter implements IDebugAdapter {
 
 	@Override
 	public CompletableFuture<Void> configurationDone(ConfigurationDoneArguments args) {
-		host.configured();
+		host.configured(stopOnEntry);
 		return CompletableFuture.completedFuture(null);
 	}
 
@@ -507,6 +518,12 @@ public class FshdbAdapter implements IDebugAdapter {
 		return CompletableFuture.completedFuture(new EvaluateResponseBody().setResult(v.getValue()).setType(v.getType())
 				.setVariablesReference(v.getVariablesReference())
 				.setIndexedVariables(v.getIndexedVariables()).setNamedVariables(v.getNamedVariables()));
+	}
+
+	/** The script (a client that didn't start it learns its name here, then asks for its text). */
+	@Override
+	public CompletableFuture<LoadedSourcesResponseBody> loadedSources(LoadedSourcesArguments args) {
+		return CompletableFuture.completedFuture(new LoadedSourcesResponseBody().setSources(List.of(source())));
 	}
 
 	@Override

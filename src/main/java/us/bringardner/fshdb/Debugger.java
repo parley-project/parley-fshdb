@@ -30,17 +30,18 @@ import java.util.concurrent.TimeUnit;
 
 import us.bringardner.fsh.ide.core.Breakpoint;
 import us.bringardner.fsh.ide.core.Completions;
-import us.bringardner.fsh.ide.core.DebugVariables;
 import us.bringardner.fsh.ide.core.ScriptText;
-import us.bringardner.fsh.ide.core.Variable;
 
 /**
- * The command-line debugger: reads commands (break, run, next, print ...), has a DebugEngine
- * run the script and reports where it stops.
+ * The command-line debugger: reads commands (break, run, next, print ...), has its target run
+ * the script and reports where it stops. The target is a DebugEngine (the script runs here)
+ * or a RemoteTarget (fshdb --attach: it runs in another fshdb, started with --listen).
  * <p>
  * Threads: commands are read and run on the thread that calls {@link #loop(CommandInput)}.
  * The script runs on its own thread; what the engine reports (stopped, ended) is queued and
- * handled by the command thread, which waits for it while the script runs.
+ * handled by the command thread, which waits for it while the script runs. What comes while
+ * the command thread isn't waiting (an attached script runs while commands are typed) is shown
+ * above the prompt, if the input can, else before the next prompt.
  * {@link #interrupt()} (Ctrl-C) may be called on any thread.
  */
 public class Debugger {
@@ -107,7 +108,9 @@ public class Debugger {
 	private final PrintStream scriptOut;
 	private final PrintStream scriptErr;
 	private final BlockingQueue<Event> events = new LinkedBlockingQueue<>();
-	private final DebugEngine engine;
+	// held while an event is handled (on the command thread, or above the prompt)
+	private final Object eventLock = new Object();
+	private final DebugTarget engine;
 	private final Breakpoints breakpoints;
 	private ExternalEditor editor = new ExternalEditor();
 
@@ -118,8 +121,8 @@ public class Debugger {
 	private String lastCommand = "";
 	// the command before the one running
 	private String previousCommand = "";
-	private boolean quit;
-	private CommandInput input;
+	private volatile boolean quit;
+	private volatile CommandInput input;
 
 	/**
 	 * @param out where the debugger writes (it may be the script's standard output too)
@@ -129,7 +132,7 @@ public class Debugger {
 		this(new DebugEngine(script, scriptIn, scriptOut, scriptErr), out, scriptOut, scriptErr);
 	}
 
-	public Debugger(DebugEngine engine, PrintStream out, PrintStream scriptOut, PrintStream scriptErr) {
+	public Debugger(DebugTarget engine, PrintStream out, PrintStream scriptOut, PrintStream scriptErr) {
 		this.engine = engine;
 		this.out = out;
 		this.scriptOut = scriptOut;
@@ -138,18 +141,18 @@ public class Debugger {
 		engine.setListener(new DebugEngine.Listener() {
 			@Override
 			public void stopped(DebugEngine.StopReason reason, int fileLine, Breakpoints.Entry breakpoint) {
-				events.add(new Stopped(fileLine, breakpoint));
+				deliver(new Stopped(fileLine, breakpoint));
 			}
 
 			@Override
 			public void ended(int exitCode, boolean canceled, Exception error) {
-				events.add(new Ended(exitCode, canceled, error));
+				deliver(new Ended(exitCode, canceled, error));
 			}
 
 			@Override
 			public void conditionFailed(int fileLine, Exception error) {
 				Debugger.this.out.println("The condition of the breakpoint on line "+fileLine
-					+" failed ("+message(error)+"); stopping there.");
+					+" failed ("+Debugger.message(error)+"); stopping there.");
 				Debugger.this.out.flush();
 			}
 
@@ -157,6 +160,13 @@ public class Debugger {
 			public void statement(int fileLine, String text) {
 				Debugger.this.scriptErr.println("+ "+(fileLine > 0 ? fileLine : "?")+": "+text);
 				Debugger.this.scriptErr.flush();
+			}
+
+			@Override
+			public void message(String text) {
+				String m = text.endsWith("\n") ? text.substring(0, text.length()-1) : text;
+				Debugger.this.out.println("["+m+"]");
+				Debugger.this.out.flush();
 			}
 		});
 		defineCommands();
@@ -166,7 +176,7 @@ public class Debugger {
 		this.editor = editor;
 	}
 
-	public DebugEngine getEngine() {
+	public DebugTarget getTarget() {
 		return engine;
 	}
 
@@ -204,11 +214,9 @@ public class Debugger {
 	/** The variable names worth completing: the stopped script's (or last run's), and the ones the script sets. */
 	public Collection<String> variableNames() {
 		TreeSet<String> ret = new TreeSet<>();
-		Map<String,Object> v = engine.variables();
+		Map<String,String> v = engine.variableList(false);
 		if( v != null ) {
-			for(Variable var : DebugVariables.list(v, false)) {
-				ret.add(var.getName());
-			}
+			ret.addAll(v.keySet());
 		}
 		ret.addAll(Completions.variables(script().code()));
 		return ret;
@@ -236,9 +244,17 @@ public class Debugger {
 				waitForScript();
 				continue;
 			}
+			handleQueued();
+			if( quit ) {
+				break;
+			}
 			out.flush();
 			scriptOut.flush();
 			String line = input.readLine(PROMPT);
+			if( quit ) {
+				// the attached script ended while the prompt was up
+				break;
+			}
 			if( line == null ) {
 				out.println();
 				break;
@@ -246,7 +262,11 @@ public class Debugger {
 			execute(line);
 		}
 		if( engine.isRunning()) {
-			stopRun();
+			if( engine.isAttached()) {
+				detach();
+			} else {
+				stopRun();
+			}
 		}
 		return engine.getLastExitCode();
 	}
@@ -307,31 +327,79 @@ public class Debugger {
 		try {
 			Event e = events.poll(250, TimeUnit.MILLISECONDS);
 			if( e != null ) {
-				handle(e);
+				synchronized (eventLock) {
+					handle(e, out);
+				}
 			}
 		} catch (InterruptedException ex) {
 			// keep waiting; Ctrl-C comes through interrupt()
 		}
 	}
 
-	private void handle(Event e) {
+	/** Reports what came while no one was waiting (and couldn't be shown above the prompt). */
+	private void handleQueued() {
+		Event e;
+		while( (e = events.poll()) != null ) {
+			synchronized (eventLock) {
+				handle(e, out);
+			}
+		}
+	}
+
+	/**
+	 * What the engine reports: queued for the command thread while it waits for the script;
+	 * otherwise (an attached script stopped while commands are typed) shown above the prompt.
+	 */
+	private void deliver(Event e) {
+		synchronized (eventLock) {
+			CommandInput in = input;
+			if( !waiting && in != null && events.isEmpty()) {
+				java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+				PrintStream p = new PrintStream(bytes, true, StandardCharsets.UTF_8);
+				boolean quitBefore = quit;
+				handle(e, p);
+				String text = new String(bytes.toByteArray(), StandardCharsets.UTF_8);
+				if( text.endsWith("\n")) {
+					text = text.substring(0, text.length()-1);
+				}
+				if( in.printAbove(text)) {
+					if( quit && !quitBefore ) {
+						in.wake();
+					}
+					return;
+				}
+				// it can't: undo, and report it before the next prompt
+				quit = quitBefore;
+			}
+			events.add(e);
+		}
+	}
+
+	private void handle(Event e, PrintStream out) {
 		if( e instanceof Stopped ) {
 			Stopped s = (Stopped) e;
 			waiting = false;
-			showStop(s.fileLine, s.breakpoint);
+			showStop(out, s.fileLine, s.breakpoint);
 		} else if( e instanceof Ended ) {
 			Ended f = (Ended) e;
 			waiting = false;
 			scriptOut.flush();
 			scriptErr.flush();
-			if( f.error != null ) {
+			if( engine.isAttached()) {
+				// nothing more to debug: the connection is gone with the script
+				quit = true;
+				if( f.error != null ) {
+					out.println("["+message(f.error)+"]");
+					return;
+				}
+			} else if( f.error != null ) {
 				out.println("The script couldn't run: "+message(f.error));
 			}
 			out.println("[script "+(f.canceled ? "stopped" : "ended")+", exit code "+f.exitCode+"]");
 		}
 	}
 
-	private void showStop(int fileLine, Breakpoints.Entry bp) {
+	private void showStop(PrintStream out, int fileLine, Breakpoints.Entry bp) {
 		scriptOut.flush();
 		scriptErr.flush();
 		if( fileLine < 0 ) {
@@ -343,7 +411,7 @@ public class Debugger {
 		} else {
 			out.println("Stopped at line "+fileLine);
 		}
-		printLine(fileLine);
+		printLine(out, fileLine);
 		listNext = fileLine+1;
 	}
 
@@ -407,8 +475,21 @@ public class Debugger {
 
 	/** Runs a resume (continue, step ...) of the stopped script; then waits for it. */
 	private void resume(Runnable r) {
-		r.run();
+		// waiting first: the stop may be reported before r returns
 		waiting = true;
+		try {
+			r.run();
+		} catch (RuntimeException e) {
+			waiting = false;
+			throw e;
+		}
+	}
+
+	/** Leaves the remote script running without a debugger. */
+	private void detach() {
+		engine.detach();
+		waiting = false;
+		out.println("Detached; the script goes on.");
 	}
 
 	private void stopRun() {
@@ -461,11 +542,16 @@ public class Debugger {
 		define("finish", "fin", "finish",
 				"Runs until the current function (or sourced file) returns.",
 				args -> {
-					if( !engine.finish()) {
-						out.println("Not in a function; use continue.");
-						return;
-					}
 					waiting = true;
+					boolean ok = false;
+					try {
+						ok = engine.finish();
+					} finally {
+						waiting = ok;
+					}
+					if( !ok ) {
+						out.println("Not in a function; use continue.");
+					}
 				});
 		define("kill", "k stop", "kill",
 				"Stops the script.",
@@ -540,17 +626,16 @@ public class Debugger {
 				"Shows the stopped script's variables. Without all, the ones inherited unchanged from the "
 				+ "environment and the shell's own defaults are left out.",
 				args -> {
-					Map<String,Object> v = engine.variables();
+					Map<String,String> v = engine.variableList(args.trim().equals("all"));
 					if( v == null ) {
 						out.println("The script isn't stopped.");
 						return;
 					}
-					List<Variable> list = DebugVariables.list(v, args.trim().equals("all"));
-					if( list.isEmpty()) {
+					if( v.isEmpty()) {
 						out.println("No variables.");
 					}
-					for(Variable var : list) {
-						out.println(var.getName()+" = "+format(var.getValue()));
+					for(Map.Entry<String,String> var : v.entrySet()) {
+						out.println(var.getKey()+" = "+var.getValue());
 					}
 				});
 		define("set", "", "set NAME=VALUE | set args [ARGUMENTS] | set stdin|stdout|stderr [FILE]",
@@ -594,10 +679,15 @@ public class Debugger {
 				"Lists the commands, or describes one.",
 				this::help);
 		define("quit", "q exit", "quit",
-				"Stops the script, if it's running, and leaves.",
+				"Stops the script, if it's running, and leaves. When attached (fshdb --attach), the script "
+				+ "goes on without the debugger; use kill first to stop it.",
 				args -> {
 					if( engine.isRunning()) {
-						stopRun();
+						if( engine.isAttached()) {
+							detach();
+						} else {
+							stopRun();
+						}
 					}
 					quit = true;
 				});
@@ -684,7 +774,7 @@ public class Debugger {
 			}
 		}
 		for(Breakpoints.Entry e : list) {
-			e.breakpoint.setEnabled(on);
+			breakpoints.setEnabled(e, on);
 			out.println((on ? "Enabled" : "Disabled")+" breakpoint "+e.number+".");
 		}
 	}
@@ -709,6 +799,10 @@ public class Debugger {
 				out.println(String.format("%-4d %-5d %-8s %s", e.number, e.fileLine, b.isEnabled(false) ? "yes" : "no",
 						cond.toString().trim()));
 			}
+		} else if( engine.isAttached() && ("args".startsWith(what) && what.startsWith("a")
+				|| "redirects".startsWith(what) && what.startsWith("r"))) {
+			out.println("The script's arguments and input and output were given to the fshdb you attached to"
+					+ " (print $@ shows the arguments while it's stopped).");
 		} else if( "args".startsWith(what) && what.startsWith("a")) {
 			String arguments = engine.getArguments();
 			out.println(arguments.isBlank() ? "No arguments." : "Arguments: "+arguments);
@@ -755,12 +849,12 @@ public class Debugger {
 		}
 		last = Math.min(last, script().lineCount());
 		for(int l=first; l <= last; l++) {
-			printLine(l);
+			printLine(out, l);
 		}
 		listNext = last+1;
 	}
 
-	private void printLine(int fileLine) {
+	private void printLine(PrintStream out, int fileLine) {
 		String text = script().line(fileLine);
 		if( text == null ) {
 			return;
@@ -781,8 +875,8 @@ public class Debugger {
 			return;
 		}
 		for(String name : args.split("\\s+")) {
-			Object value = engine.variable(name);
-			out.println(name+" = "+(value == null ? "(not set)" : format(value)));
+			String value = engine.formattedVariable(name);
+			out.println(name+" = "+(value == null ? "(not set)" : value));
 		}
 	}
 
@@ -904,6 +998,10 @@ public class Debugger {
 	}
 
 	private void edit(String args) throws IOException {
+		if( engine.isAttached()) {
+			out.println("The script runs in the fshdb you attached to; edit it there.");
+			return;
+		}
 		ScriptFile script = script();
 		int line = args.isEmpty() ? (engine.getPausedLine() > 0 ? engine.getPausedLine() : Math.max(1, listNext-1)) : number(args.trim());
 		File local = script.localFile();

@@ -28,8 +28,9 @@ import us.bringardner.parley.dap.DapConnection;
  * and lets a debugger attach to it over the Debug Adapter Protocol, the way a Java program
  * started with -agentlib:jdwp lets Eclipse attach.
  * <ul>
- * <li>suspend: the script waits for a debugger's configurationDone before it starts;
- *     otherwise it starts at once and a debugger can attach while it runs.</li>
+ * <li>suspend: the script waits for a debugger's configurationDone before it starts (stopping
+ *     before its first statement if the launch or attach asked for "stopOnEntry"); otherwise it
+ *     starts at once and a debugger can attach while it runs.</li>
  * <li>One debugger at a time. When it detaches (disconnect), the script carries on without
  *     breakpoints and another debugger can attach.</li>
  * <li>When the script ends, fshdb tells the debugger (exited, terminated) and exits with the
@@ -44,6 +45,7 @@ public class DapHost implements FshdbAdapter.Host {
 	private final PrintStream log;
 
 	private final CountDownLatch configured = new CountDownLatch(1);
+	private volatile boolean stopOnEntry;
 	private final CountDownLatch ended = new CountDownLatch(1);
 	private volatile ServerSocket serverSocket;
 	private volatile FshdbAdapter current;
@@ -136,7 +138,7 @@ public class DapHost implements FshdbAdapter.Host {
 				if( suspend ) {
 					configured.await();
 				}
-				engine.start(true, false);
+				engine.start(true, suspend && stopOnEntry);
 			} catch (InterruptedException e) {
 				ended.countDown();
 			} catch (RuntimeException e) {
@@ -200,7 +202,10 @@ public class DapHost implements FshdbAdapter.Host {
 	}
 
 	@Override
-	public void configured() {
+	public void configured(boolean stopOnEntry) {
+		if( configured.getCount() > 0 ) {
+			this.stopOnEntry = stopOnEntry;
+		}
 		configured.countDown();
 	}
 

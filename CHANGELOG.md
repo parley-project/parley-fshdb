@@ -22,7 +22,14 @@ First version: a terminal debugger for shell scripts, built on fsh and fsh-ide's
   over the Debug Adapter Protocol (parley-dap): breakpoints with conditions and hit counts,
   stepping, pause, call stack, variables, set variable, evaluate (variables only), detach and
   re-attach.
+- `--attach [HOST:]PORT`: the command-line debugger for a script started with `--listen`, in
+  another console or on another machine, with the same commands. It starts a waiting script
+  (run, or start to stop at its first statement) or attaches to a running one; stops and the
+  script's end are shown above the prompt; quit leaves the script running, kill stops it.
+- The DAP adapter lists its script (`loadedSources`) and honors `"stopOnEntry"` for a script
+  waiting with `--suspend`.
 - `DebugEngine`: the run, breakpoints and stopped state, shared by the command line and the
-  DAP adapter.
+  DAP adapter. The command line works through `DebugTarget`, which `RemoteTarget` (the
+  `--attach` DAP client) implements too.
 - Variables include the running functions' `local` ones (needs fsh with the
   `ShellContext.getVariables()` locals fix).

@@ -90,25 +90,48 @@ debugger attaches to it from somewhere else, over the
 
 ```
 console 1:  fshdb --listen 5005 --suspend deploy.sh staging    # the script's input and output stay here
-console 2:  any DAP client: VS Code, Eclipse (LSP4E), vim (vimspector) ...
+console 2:  fshdb --attach 5005                               # or any DAP client: VS Code, Eclipse (LSP4E) ...
 ```
 
 - `--listen [HOST:]PORT` serves DAP on PORT. HOST defaults to 127.0.0.1 (this machine only);
   `0.0.0.0` accepts debuggers from other machines, or use an SSH tunnel.
-- `--suspend` makes the script wait for a debugger (its `configurationDone`) before it starts.
-  Without it the script starts at once, and a debugger can attach while it runs and `pause` it.
+- `--suspend` makes the script wait for a debugger (its `configurationDone`) before it starts;
+  `"stopOnEntry": true` in the launch or attach configuration stops it before its first
+  statement. Without `--suspend` the script starts at once, and a debugger can attach while it
+  runs and `pause` it.
 - One debugger at a time. When it disconnects, the script goes on without breakpoints and
   another can attach; with "terminate" it stops the script. When the script ends, fshdb tells
   the debugger and exits with the script's exit code.
 - Supported: breakpoints with conditions and hit counts, continue, next, step in, step out,
   pause, the call stack, variables (arrays expand), setting variables, hovering over or
-  evaluating a variable (only variables: nothing else is run), and the source.
+  evaluating a variable (only variables: nothing else is run), and the source (`loadedSources`
+  names the script, `source` gives its text).
 - One thread, "main". Every frame shows the variables of the statement the script is stopped
   at (fsh doesn't keep the callers' variables apart).
 
+### fshdb --attach
+
+```
+fshdb --attach [HOST:]PORT [-e COMMAND]... [-x FILE]
+```
+
+is the command-line debugger for a script started with `--listen`, from another console or
+another machine (`--attach build-server:5005`, or through an SSH tunnel). The commands are the
+same as for a script run here; the script's text comes from the other fshdb, so `list` and
+`break` show what runs there.
+
+- If the script waits (`--suspend`), set breakpoints, then `run`, or `start` to stop before its
+  first statement.
+- If it's running, breakpoints take effect as you set them. A stop, or the script's end, is
+  shown above the prompt; Ctrl-C pauses it.
+- `quit` leaves the script running without breakpoints (another debugger can attach); `kill`
+  stops it. When the script ends, fshdb --attach leaves with its exit code.
+- The script's arguments, redirects and code belong to the fshdb it runs in, so `set args`,
+  `set stdin`, `trace`, `edit`, `reload`, `file` and `exec` say so instead.
+
 The DAP side is [parley-dap](https://github.com/tony-bringardner/parley-dap).
 
-
+## Requirements
 
 - Java 11 or later
 - fsh, fsh-ide and parley-dap (their SNAPSHOTs: `mvn install` them first), and JLine 3 (from
@@ -132,6 +155,8 @@ fshdb is a front end like fsh-ide's Swing and JavaFX IDEs: `ScriptRun` runs the 
 own thread with the terminal as its standard streams; a `DebugSession` stops it at breakpoints.
 `DebugEngine` holds the run, the breakpoints and where the script is stopped; the command line
 (`Debugger`) and the DAP adapter (`FshdbAdapter`, served by `DapHost`) are two front ends to it.
+The command line works through the `DebugTarget` interface, so with `--attach` it drives a
+`RemoteTarget` instead: a DAP client of another fshdb's `FshdbAdapter`.
 `ConsoleDebugSession` adds what a command-line debugger needs on top of fsh-ide's session:
 `next` and `finish` by function depth, `step` that doesn't stop on a function's `{` line, and
 `start`. Only fsh-ide's core classes are used; its pom's Swing and JavaFX libraries are excluded.
