@@ -24,5 +24,5 @@ First version: a terminal debugger for shell scripts, built on fsh and fsh-ide's
   re-attach.
 - `DebugEngine`: the run, breakpoints and stopped state, shared by the command line and the
   DAP adapter.
-- Variables include the running functions' `local` ones (fsh's `ShellContext.getVariables()`
-  leaves them out, so they're looked up by the names the script sets).
+- Variables include the running functions' `local` ones (needs fsh with the
+  `ShellContext.getVariables()` locals fix).
