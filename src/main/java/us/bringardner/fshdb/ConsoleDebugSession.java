@@ -41,6 +41,8 @@ public class ConsoleDebugSession extends DebugSession {
 	private volatile Mode mode = Mode.NONE;
 	private volatile int depth;
 	private volatile boolean stopAtFirst;
+	// why the script stops (read by the paused listener, on the script's thread, just after isBreakpoint)
+	private volatile DebugEngine.StopReason stopReason = DebugEngine.StopReason.PAUSE;
 	// a breakpoint condition being evaluated calls isBreakpoint for its own commands
 	private final ThreadLocal<Boolean> checking = ThreadLocal.withInitial(()->Boolean.FALSE);
 	// the command about to run is a { } group (a function's body): stepping goes to its first command
@@ -73,6 +75,11 @@ public class ConsoleDebugSession extends DebugSession {
 	public void suspend() {
 		mode = Mode.NONE;
 		super.suspend();
+	}
+
+	/** Why the script stopped (valid in DebugSession.Listener.paused). */
+	public DebugEngine.StopReason getStopReason() {
+		return stopReason;
 	}
 
 	/**
@@ -116,15 +123,20 @@ public class ConsoleDebugSession extends DebugSession {
 		} finally {
 			checking.set(Boolean.FALSE);
 		}
+		DebugEngine.StopReason why = DebugEngine.StopReason.BREAKPOINT;
 		if( !ret && isActive() && editorLine(linePt.x) >= 0 && !group.get()) {
 			if( stopAtFirst ) {
 				ret = true;
+				why = DebugEngine.StopReason.ENTRY;
 			} else {
 				Mode m = mode;
 				int d = ctx.callFrames.size();
 				ret = m == Mode.STEP || (m == Mode.NEXT && d <= depth) || (m == Mode.FINISH && d < depth);
+				why = DebugEngine.StopReason.STEP;
 			}
 		}
+		// if it stops without a breakpoint or step here, pause() (suspend) stopped it
+		stopReason = ret ? why : DebugEngine.StopReason.PAUSE;
 		if( ret ) {
 			stopAtFirst = false;
 			mode = Mode.NONE;
