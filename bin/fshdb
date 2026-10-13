@@ -1,0 +1,15 @@
+#!/bin/sh
+# fshdb launcher: runs the all-in-one jar next to this script (or in ../target).
+# Put this script and fshdb-*-all.jar in the same directory on the PATH, or set FSHDB_JAR.
+dir=$(cd "$(dirname "$0")" && pwd)
+jar=${FSHDB_JAR:-}
+if [ -z "$jar" ]; then
+	for j in "$dir"/fshdb-*-all.jar "$dir"/../target/fshdb-*-all.jar; do
+		[ -f "$j" ] && jar=$j
+	done
+fi
+if [ -z "$jar" ]; then
+	echo "fshdb: can't find fshdb-*-all.jar (build it with: mvn package, or set FSHDB_JAR)" >&2
+	exit 2
+fi
+exec "${JAVA:-java}" ${FSHDB_JAVA_OPTS:-} -jar "$jar" "$@"

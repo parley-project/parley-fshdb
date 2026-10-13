@@ -1,0 +1,6 @@
+target/
+.DS_*
+# Eclipse
+.classpath
+.project
+.settings/
