@@ -140,6 +140,25 @@ public class TestDebugger {
 	}
 
 	@Test
+	public void inAFunctionDollarZeroIsTheScriptsAndDollarOneTheFunctions() {
+		Session s = new Session(DEMO);
+		// stopped before "local who=$1" in greet
+		String out = s.run("break 4", "run a b", "print $0 $1 $#", "set $1=changed", "print $1", "set $0=x", "continue");
+		assertTrue(out.contains("$0 = test.sh\n$1 = world\n$# = 1\n"), out);
+		assertTrue(out.contains("$1 = changed\n"), out);
+		assertTrue(out.contains("$0 can't be set"), out);
+		// the function's $1 changed; the script's arguments didn't
+		assertTrue(out.contains("hello changed\ntotal=10 args=a b"), out);
+	}
+
+	@Test
+	public void lineNumbersAreTheFiles() {
+		Session s = new Session("#!/bin/bash\necho \"line $LINENO\"\nf() { echo \"called from $BASH_LINENO\"; }\nf\n");
+		String out = s.run("exec");
+		assertTrue(out.contains("line 2\ncalled from 4\n"), out);
+	}
+
+	@Test
 	public void startStopsAtTheFirstStatement() {
 		Session s = new Session(DEMO);
 		String out = s.run("start", "continue");
