@@ -6,7 +6,7 @@
 	<!-- fshdb: run and debug shell scripts in a terminal, using fsh as the interpreter -->
 	<groupId>us.bringardner</groupId>
 	<artifactId>fshdb</artifactId>
-	<version>1.1.0-SNAPSHOT</version>
+	<version>2.0.0-SNAPSHOT</version>
 	<name>fshdb - console debugger for shell scripts</name>
 	<description>Runs and debugs bash/POSIX-style scripts in a terminal (no Swing or JavaFX), using
 		fsh (the FileSource Shell) as the interpreter and fsh-ide's UI-free core for running and
@@ -37,10 +37,10 @@
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<maven.compiler.release>11</maven.compiler.release>
-		<fsh.version>1.1.0-SNAPSHOT</fsh.version>
-		<fsh-ide.version>1.1.0-SNAPSHOT</fsh-ide.version>
+		<fsh.version>2.0.0-SNAPSHOT</fsh.version>
+		<fsh-ide.version>2.0.0-SNAPSHOT</fsh-ide.version>
 		<jline.version>3.30.17</jline.version>
-		<parley.version>1.0.0</parley.version>
+		<parley.version>2.0.0-SNAPSHOT</parley.version>
 	</properties>
 
 	<build>
