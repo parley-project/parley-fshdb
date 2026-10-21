@@ -6,12 +6,12 @@
 	<!-- fshdb: run and debug shell scripts in a terminal, using fsh as the interpreter -->
 	<groupId>us.bringardner</groupId>
 	<artifactId>fshdb</artifactId>
-	<version>1.0.0-SNAPSHOT</version>
+	<version>1.0.0</version>
 	<name>fshdb - console debugger for shell scripts</name>
 	<description>Runs and debugs bash/POSIX-style scripts in a terminal (no Swing or JavaFX), using
 		fsh (the FileSource Shell) as the interpreter and fsh-ide's UI-free core for running and
 		debugging. Scripts are edited with $EDITOR.</description>
-	<url>https://github.com/tony-bringardner/fshdb</url>
+	<url>https://github.com/parley-project/parley-fshdb</url>
 	<inceptionYear>2026</inceptionYear>
 
 	<licenses>
@@ -28,12 +28,17 @@
 			<url>https://github.com/tony-bringardner</url>
 		</developer>
 	</developers>
+	<scm>
+		<connection>scm:git:https://github.com/parley-project/parley-fshdb.git</connection>
+		<developerConnection>scm:git:ssh://git@github.com/parley-project/parley-fshdb.git</developerConnection>
+		<url>https://github.com/parley-project/parley-fshdb/tree/master</url>
+	</scm>
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<maven.compiler.release>11</maven.compiler.release>
-		<fsh.version>1.0.0-SNAPSHOT</fsh.version>
-		<fsh-ide.version>1.0.0-SNAPSHOT</fsh-ide.version>
+		<fsh.version>1.0.0</fsh.version>
+		<fsh-ide.version>1.0.0</fsh-ide.version>
 		<jline.version>3.30.17</jline.version>
 		<parley.version>1.0.0</parley.version>
 	</properties>
@@ -112,6 +117,76 @@
 			</plugins>
 		</pluginManagement>
 	</build>
+
+	<profiles>
+		<!-- Maven Central: mvn -Prelease clean deploy (sources, javadoc, GPG signatures, upload) -->
+		<profile>
+			<id>release</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-source-plugin</artifactId>
+						<version>3.3.1</version>
+						<executions>
+							<execution>
+								<id>attach-sources</id>
+								<goals>
+									<goal>jar-no-fork</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-javadoc-plugin</artifactId>
+						<version>3.11.2</version>
+						<configuration>
+							<!-- Lenient so existing code releases cleanly; tighten to all,-missing later -->
+							<doclint>none</doclint>
+							<release>${maven.compiler.release}</release>
+						</configuration>
+						<executions>
+							<execution>
+								<id>attach-javadocs</id>
+								<goals>
+									<goal>jar</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-gpg-plugin</artifactId>
+						<version>3.2.7</version>
+						<executions>
+							<execution>
+								<id>sign-artifacts</id>
+								<phase>verify</phase>
+								<goals>
+									<goal>sign</goal>
+								</goals>
+								<!-- Passphrase comes from the MAVEN_GPG_PASSPHRASE environment variable -->
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.sonatype.central</groupId>
+						<artifactId>central-publishing-maven-plugin</artifactId>
+						<version>0.11.0</version>
+						<extensions>true</extensions>
+						<configuration>
+							<!-- Matches the <server><id> in ~/.m2/settings.xml -->
+							<publishingServerId>central</publishingServerId>
+							<!-- false: you review and click Publish on central.sonatype.com -->
+							<autoPublish>false</autoPublish>
+							<deploymentName>${project.artifactId} ${project.version}</deploymentName>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
 
 	<dependencies>
 		<!-- The interpreter. Brings parley-files and its FTP and SFTP file systems. -->
