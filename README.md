@@ -1,9 +1,9 @@
 # fshdb
 
 A debugger for shell scripts that runs in a terminal: no Swing, no JavaFX, so it works over
-SSH and on servers without a display. It uses [fsh](https://github.com/tony-bringardner/fsh),
+SSH and on servers without a display. It uses [fsh](https://github.com/parley-project/parley-fsh),
 the FileSource Shell, as the interpreter and the UI-free core of
-[fsh-ide](https://github.com/tony-bringardner/fsh-ide) (`us.bringardner.fsh.ide.core`) for
+[fsh-ide](https://github.com/parley-project/parley-fsh-ide) (`us.bringardner.fsh.ide.core`) for
 running and debugging. fsh aims to be close to bash/POSIX, so fshdb works for those scripts too.
 
 Commands are like gdb's or bashdb's. Scripts are edited with your own editor (`$VISUAL` or
@@ -131,7 +131,7 @@ same as for a script run here; the script's text comes from the other fshdb, so 
 - The script's arguments, redirects and code belong to the fshdb it runs in, so `set args`,
   `set stdin`, `trace`, `edit`, `reload`, `file` and `exec` say so instead.
 
-The DAP side is [parley-dap](https://github.com/tony-bringardner/parley-dap).
+The DAP side is [parley-dap](https://github.com/parley-project/parley-dap).
 
 ## Requirements
 

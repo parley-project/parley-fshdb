@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0 (unreleased)
+## 1.0.0 (2026-10-21)
 
 First version: a terminal debugger for shell scripts, built on fsh and fsh-ide's UI-free core.
 
