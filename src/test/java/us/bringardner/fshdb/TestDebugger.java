@@ -78,7 +78,8 @@ public class TestDebugger {
 
 		String text() {
 			out.flush();
-			return new String(bytes.toByteArray(), StandardCharsets.UTF_8);
+			// (println ends a line with \r\n on Windows: the tests compare with \n)
+			return new String(bytes.toByteArray(), StandardCharsets.UTF_8).replace("\r", "");
 		}
 	}
 
