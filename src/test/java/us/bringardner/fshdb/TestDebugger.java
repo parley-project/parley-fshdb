@@ -373,9 +373,14 @@ public class TestDebugger {
 		Files.write(script.toPath(), "echo before\n".getBytes(StandardCharsets.UTF_8));
 		// an "editor" that rewrites the file and records its arguments
 		File log = new File(dir, "editor.log");
-		File fake = new File(dir, "fake-editor");
-		Files.write(fake.toPath(), ("#!/bin/sh\necho \"$@\" > '"+log+"'\n"
-				+ "for f; do :; done\nprintf 'echo after\\necho more\\n' > \"$f\"\n").getBytes(StandardCharsets.UTF_8));
+		// (on Windows the "editor" is a batch file: a shell script can't be started)
+		boolean windows = File.separatorChar == '\\';
+		File fake = new File(dir, windows ? "fake-editor.cmd" : "fake-editor");
+		String body = windows
+				? "@echo %*>\""+log+"\"\r\n@echo echo after>\"%~1\"\r\n@echo echo more>>\"%~1\"\r\n"
+				: "#!/bin/sh\necho \"$@\" > '"+log+"'\n"
+				+ "for f; do :; done\nprintf 'echo after\\necho more\\n' > \"$f\"\n";
+		Files.write(fake.toPath(), body.getBytes(StandardCharsets.UTF_8));
 		fake.setExecutable(true);
 
 		ScriptFile sf = new ScriptFile(script.getAbsolutePath());

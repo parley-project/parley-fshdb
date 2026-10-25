@@ -226,7 +226,7 @@ public class TestAttach {
 		flag.delete();
 		String code =
 				"n=0\n"                               // 1
-				+ "while [ ! -f \""+flag.getPath()+"\" ]; do\n" // 2
+				+ "while [ ! -f \""+flag.getPath().replace('\\', '/')+"\" ]; do\n" // 2
 				+ "  n=$((n+1))\n"                    // 3
 				+ "  sleep 0.05\n"                    // 4
 				+ "done\n"                            // 5
@@ -259,7 +259,7 @@ public class TestAttach {
 	public void anotherDebuggerCanAttachAfterOneLeaves() throws Exception {
 		File flag = File.createTempFile("fshdb-attach", ".flag");
 		flag.delete();
-		String code = "while [ ! -f \""+flag.getPath()+"\" ]; do\n  sleep 0.05\ndone\necho over\n";
+		String code = "while [ ! -f \""+flag.getPath().replace('\\', '/')+"\" ]; do\n  sleep 0.05\ndone\necho over\n";
 		try {
 			int port = listen(code, false, null);
 			Session first = new Session(port, true);
