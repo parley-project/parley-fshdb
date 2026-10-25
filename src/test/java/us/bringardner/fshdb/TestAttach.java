@@ -86,7 +86,7 @@ public class TestAttach {
 	}
 
 	private String scriptOutput() {
-		return new String(scriptOut.toByteArray(), StandardCharsets.UTF_8);
+		return new String(scriptOut.toByteArray(), StandardCharsets.UTF_8).replace("\r", "");
 	}
 
 	/**
@@ -118,7 +118,7 @@ public class TestAttach {
 
 		String text() {
 			out.flush();
-			return new String(bytes.toByteArray(), StandardCharsets.UTF_8);
+			return new String(bytes.toByteArray(), StandardCharsets.UTF_8).replace("\r", "");
 		}
 
 		@Override
