@@ -101,6 +101,41 @@
 					</execution>
 				</executions>
 			</plugin>
+			<!-- META-INF/parley/launcher.list in the jar: how parley-launcher runs it, and every jar it
+			     needs with its SHA-256 (parley-launcher add NAME COORDINATES [MAIN]) -->
+			<plugin>
+				<groupId>us.bringardner.parley</groupId>
+				<artifactId>parley-launcher-maven-plugin</artifactId>
+				<version>${parley.version}</version>
+				<executions>
+					<execution>
+						<goals>
+							<goal>list</goal>
+						</goals>
+					</execution>
+				</executions>
+				<configuration>
+					<mainClass>us.bringardner.fshdb.Fshdb</mainClass>
+					<options>
+						<!-- (fsh's options, as fsh's installers give it: it runs fsh scripts) -->
+						<option>-Xss16m</option>
+						<option>-XX:+UseSerialGC</option>
+						<option>-Xmn16m</option>
+						<option>-XX:MinHeapFreeRatio=10</option>
+						<option>-XX:MaxHeapFreeRatio=20</option>
+						<option>-XX:-MaxFDLimit</option>
+						<option>-Djava.library.path={native}</option>
+						<option>17+:--enable-native-access=ALL-UNNAMED</option>
+						<option>-Djava.awt.headless=true</option>
+					</options>
+					<!-- (fsh's keyboard library and fshexec, from fsh's native jar; through fshexec -j, as fsh) -->
+					<nativeFrom>us.bringardner:fsh</nativeFrom>
+					<wrapper>
+						<part>{native}/fshexec</part>
+						<part>-j</part>
+					</wrapper>
+				</configuration>
+			</plugin>
 		</plugins>
 		<pluginManagement>
 			<plugins>
