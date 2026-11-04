@@ -288,6 +288,7 @@ public class Fshdb {
 	/** Tab completion: command names, then variable names (print, set) or file names (file). */
 	static final class DebuggerCompleter implements Completer {
 		private final Debugger debugger;
+		@SuppressWarnings("deprecation")
 		private final FileNameCompleter files = new FileNameCompleter();
 
 		DebuggerCompleter(Debugger debugger) {
