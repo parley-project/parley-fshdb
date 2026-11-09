@@ -4,6 +4,9 @@
 
 Built on fsh and fsh-ide 1.1.0.
 
+- `break LINE hits N` stops on the Nth hit and every hit after it (it used to stop on the Nth
+  only), the same as fsh-ide and the Loupe and Debug Adapter Protocol adapters.
+
 ## 1.0.0 (2026-10-21)
 
 First version: a terminal debugger for shell scripts, built on fsh and fsh-ide's UI-free core.

@@ -40,7 +40,7 @@ Stopped at line 5
 | `next` (`n`) | Run the statement and stop at the next one here, stepping over function calls. |
 | `finish` (`fin`) | Run until the current function (or sourced file) returns. |
 | `kill` (`k`) | Stop the script. |
-| `break [LINE] [hits N] [if COMMAND]` (`b`) | Breakpoint on a line (default: the current one). `hits N` stops on the Nth time only; `if COMMAND` only when the command succeeds. A line with no code moves the breakpoint to the next line that has some. |
+| `break [LINE] [hits N] [if COMMAND]` (`b`) | Breakpoint on a line (default: the current one). `hits N` stops on the Nth time and every time after it; `if COMMAND` only when the command succeeds. A line with no code moves the breakpoint to the next line that has some. |
 | `delete [N...]`, `clear LINE`, `disable [N...]`, `enable [N...]`, `condition N [COMMAND]` | Manage breakpoints. |
 | `info breakpoints\|args\|redirects\|script` | Show them. |
 | `list [LINE \| FIRST,LAST \| -]` (`l`) | Show lines; `*` marks a breakpoint (`o` a disabled one), `>` where the script is stopped. |

@@ -92,7 +92,7 @@ public class Breakpoints {
 	 * Adds a breakpoint, or returns the one already on the line (its condition and hit count are
 	 * replaced by these).
 	 * @param condition a command (such as [ $i -gt 3 ]): stop only if it succeeds; null for none
-	 * @param hitCount stop only on this hit; 0 for every hit
+	 * @param hitCount stop on this hit and every hit after it; 0 for every hit
 	 */
 	public Entry add(int fileLine, String condition, int hitCount) {
 		Entry e;
