@@ -563,8 +563,8 @@ public class Debugger {
 					stopRun();
 				});
 		define("break", "b", "break [LINE] [hits N] [if COMMAND]",
-				"Sets a breakpoint on a line (default: the current line). With hits N it stops only on the Nth "
-				+ "time; with if COMMAND only when the command succeeds, for example: break 12 if [ $i -gt 3 ]",
+				"Sets a breakpoint on a line (default: the current line). With hits N it stops on the Nth time "
+				+ "and every time after it; with if COMMAND only when the command succeeds, for example: break 12 if [ $i -gt 3 ]",
 				this::breakCommand);
 		define("delete", "d", "delete [NUMBER...]",
 				"Deletes breakpoints by number, or all of them.",

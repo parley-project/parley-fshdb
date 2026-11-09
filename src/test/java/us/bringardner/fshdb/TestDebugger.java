@@ -113,9 +113,12 @@ public class TestDebugger {
 		assertTrue(out.contains("i = 3"), out);
 
 		s = new Session(DEMO);
-		out = s.run("break 11 hits 2", "run", "print i", "continue");
-		assertEquals(Arrays.asList(11), stops(out));
-		assertTrue(out.contains("i = 2"), out);
+		// hits N stops on the Nth hit and every hit after it
+		out = s.run("break 11 hits 2", "run", "print i", "continue", "print i", "continue", "print i", "continue");
+		assertEquals(Arrays.asList(11, 11, 11), stops(out));
+		assertTrue(out.contains("i = 2\n") && out.contains("i = 3\n") && out.contains("i = 4\n"), out);
+		assertTrue(!out.contains("i = 1\n"), out);
+		assertTrue(out.contains("total=10"), out);
 	}
 
 	@Test
