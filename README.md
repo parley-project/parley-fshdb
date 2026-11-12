@@ -1,6 +1,6 @@
 # fshdb
 
-A debugger for shell scripts that runs in a terminal: no Swing, no JavaFX, so it works over
+A debugger for shell scripts that runs in a terminal: no Swing, so it works over
 SSH and on servers without a display. It uses [fsh](https://github.com/parley-project/parley-fsh),
 the FileSource Shell, as the interpreter and the UI-free core of
 [fsh-ide](https://github.com/parley-project/parley-fsh-ide) (`us.bringardner.fsh.ide.core`) for
@@ -153,7 +153,7 @@ server's PATH. `FSHDB_JAVA_OPTS` passes options to Java.
 
 ## How it works
 
-fshdb is a front end like fsh-ide's Swing and JavaFX IDEs: `ScriptRun` runs the script on its
+fshdb is a front end like fsh-ide's Swing IDE: `ScriptRun` runs the script on its
 own thread with the terminal as its standard streams; a `DebugSession` stops it at breakpoints.
 `DebugEngine` holds the run, the breakpoints and where the script is stopped; the command line
 (`Debugger`) and the DAP adapter (`FshdbAdapter`, served by `DapHost`) are two front ends to it.
@@ -161,7 +161,7 @@ The command line works through the `DebugTarget` interface, so with `--attach` i
 `RemoteTarget` instead: a DAP client of another fshdb's `FshdbAdapter`.
 `ConsoleDebugSession` adds what a command-line debugger needs on top of fsh-ide's session:
 `next` and `finish` by function depth, `step` that doesn't stop on a function's `{` line, and
-`start`. Only fsh-ide's core classes are used; its pom's Swing and JavaFX libraries are excluded.
+`start`. Only fsh-ide's core classes are used; its pom's Swing libraries are excluded.
 
 ## License
 
