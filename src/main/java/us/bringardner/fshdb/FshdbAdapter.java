@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
-import us.bringardner.fsh.ide.core.DebugVariables;
+import us.bringardner.fsh.debug.DebugVariables;
 import us.bringardner.parley.dap.DapEndpoint;
 import us.bringardner.parley.dap.DapException;
 import us.bringardner.parley.dap.protocol.AttachRequestArguments;
@@ -426,7 +426,7 @@ public class FshdbAdapter implements IDebugAdapter {
 	private List<Variable> variablesOf(Map<String,Object> vars, boolean all) {
 		List<Variable> ret = new ArrayList<>();
 		if( vars != null ) {
-			for(us.bringardner.fsh.ide.core.Variable v : DebugVariables.list(vars, all)) {
+			for(us.bringardner.fsh.debug.Variable v : DebugVariables.list(vars, all)) {
 				if( !v.getName().startsWith("$")) {
 					ret.add(variable(v.getName(), v.getValue()));
 				}

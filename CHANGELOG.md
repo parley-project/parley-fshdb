@@ -2,7 +2,11 @@
 
 ## 1.1.0 (unreleased)
 
-Built on fsh and fsh-ide 1.1.0.
+Built on fsh and parley-fsh-debug 1.1.0.
+
+- Running and debugging come from parley-fsh-debug (`us.bringardner.fsh.debug`), a library shared
+  with Fsh Studio, instead of Fsh Studio's jar, so fshdb no longer depends on the IDE (or has to
+  leave out its user-interface libraries). Its all-in-one jar is about 2 MB smaller.
 
 - `break LINE hits N` stops on the Nth hit and every hit after it (it used to stop on the Nth
   only), the same as fsh-ide and the Loupe and Debug Adapter Protocol adapters.

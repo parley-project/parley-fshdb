@@ -16,8 +16,8 @@ import java.awt.Point;
 import java.util.function.IntFunction;
 
 import us.bringardner.fsh.ShellContext;
-import us.bringardner.fsh.ide.core.Breakpoint;
-import us.bringardner.fsh.ide.core.DebugSession;
+import us.bringardner.fsh.debug.Breakpoint;
+import us.bringardner.fsh.debug.DebugSession;
 import us.bringardner.fsh.syntax.Ast;
 
 /**
