@@ -21,7 +21,7 @@ import us.bringardner.fsh.debug.DebugSession;
 import us.bringardner.fsh.syntax.Ast;
 
 /**
- * fsh-ide's DebugSession with the stepping a command-line debugger needs:
+ * Fsh Studio's DebugSession with the stepping a command-line debugger needs:
  * <ul>
  * <li>next: stop at the next statement that isn't inside a function called (or a file
  *     sourced) from here; fsh's own step over stops at the very next statement, like step.</li>

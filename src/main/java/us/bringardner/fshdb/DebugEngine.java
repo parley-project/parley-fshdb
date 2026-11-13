@@ -185,7 +185,7 @@ public class DebugEngine implements DebugTarget {
 		this.listener = listener;
 	}
 
-	/** The arguments and redirects the script is run with: the ones fsh-ide keeps for it (see ScriptFile.settings). */
+	/** The arguments and redirects the script is run with: the ones Fsh Studio keeps for it (see ScriptFile.settings). */
 	public void useSettingsOf(ScriptFile s) {
 		RunSettings r = s.settings();
 		arguments = r.arguments();

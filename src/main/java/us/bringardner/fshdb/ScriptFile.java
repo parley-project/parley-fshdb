@@ -31,12 +31,12 @@ import us.bringardner.parley.files.fileproxy.FileProxyFactory;
  * <p>
  * Line numbers are the file's (1-based), as an editor shows them, and the code that runs is
  * the file as it is, so $LINENO and fsh's messages agree with them too. A script saved by an
- * earlier fsh-ide still has its settings in comment lines (#BjlIdeScriptArgs= and so on, see
+ * earlier Fsh Studio still has its settings in comment lines (#BjlIdeScriptArgs= and so on, see
  * ScriptDocument): they're read for the settings and run as blank lines. parley-fsh-debug numbers
  * lines from 0 ("editor lines"); here that's the file line less one.
  * <p>
  * The settings come from those lines if the script has them, else from the user's run
- * settings, which fsh-ide keeps (RunSettingsStore). fshdb only reads them.
+ * settings, which Fsh Studio keeps (RunSettingsStore). fshdb only reads them.
  */
 public class ScriptFile {
 
@@ -99,7 +99,7 @@ public class ScriptFile {
 			all.remove(all.size()-1);
 		}
 		lines = all;
-		// settings lines of an earlier fsh-ide run as blank lines, so every line keeps its number
+		// settings lines of an earlier Fsh Studio run as blank lines, so every line keeps its number
 		StringBuilder run = new StringBuilder(text.length());
 		for(String line : all) {
 			if( !ScriptDocument.isLegacySettingsLine(line)) {
@@ -147,7 +147,7 @@ public class ScriptFile {
 		return file == null ? path : file.getAbsolutePath();
 	}
 
-	/** The code to run: the file, line for line (any settings lines of an earlier fsh-ide are blank). */
+	/** The code to run: the file, line for line (any settings lines of an earlier Fsh Studio are blank). */
 	public String code() {
 		return code;
 	}

@@ -261,8 +261,8 @@ public class TestDebugger {
 	}
 
 	@Test
-	public void settingsLinesOfAnEarlierFshIdeKeepFileLineNumbers() {
-		// an earlier fsh-ide kept a script's arguments in a comment line: read, and run as a blank line
+	public void settingsLinesOfAnEarlierFshStudioKeepFileLineNumbers() {
+		// an earlier Fsh Studio kept a script's arguments in a comment line: read, and run as a blank line
 		String text = "#BjlIdeScriptArgs=alpha beta\n"
 				+ "x=1\n"
 				+ "echo \"args $* line $LINENO\"\n";
@@ -275,7 +275,7 @@ public class TestDebugger {
 	}
 
 	@Test
-	public void runsWithTheArgumentsFshIdeKeepsForTheScript() throws Exception {
+	public void runsWithTheArgumentsFshStudioKeepsForTheScript() throws Exception {
 		java.nio.file.Path dir = Files.createTempDirectory("fshdb-settings");
 		try {
 			File script = dir.resolve("kept.sh").toFile();
