@@ -280,10 +280,10 @@ public class TestDebugger {
 		try {
 			File script = dir.resolve("kept.sh").toFile();
 			Files.write(script.toPath(), "echo \"args $*\" >&2\necho out\n".getBytes(StandardCharsets.UTF_8));
-			us.bringardner.fsh.ide.core.RunSettingsStore store = new us.bringardner.fsh.ide.core.RunSettingsStore(
+			us.bringardner.fsh.debug.RunSettingsStore store = new us.bringardner.fsh.debug.RunSettingsStore(
 					dir.resolve("run-settings").toFile());
 			File outFile = dir.resolve("out.txt").toFile();
-			store.put(script.getCanonicalPath(), new us.bringardner.fsh.ide.core.RunSettings("one two", "", outFile.getPath(), ""));
+			store.put(script.getCanonicalPath(), new us.bringardner.fsh.debug.RunSettings("one two", "", outFile.getPath(), ""));
 			ScriptFile f = new ScriptFile(script.getPath(), store);
 			f.load();
 			Session s = new Session(f, "");

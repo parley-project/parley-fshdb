@@ -28,9 +28,9 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-import us.bringardner.fsh.ide.core.Breakpoint;
-import us.bringardner.fsh.ide.core.Completions;
-import us.bringardner.fsh.ide.core.ScriptText;
+import us.bringardner.fsh.debug.Breakpoint;
+import us.bringardner.fsh.debug.Completions;
+import us.bringardner.fsh.debug.ScriptText;
 
 /**
  * The command-line debugger: reads commands (break, run, next, print ...), has its target run

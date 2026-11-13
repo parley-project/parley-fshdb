@@ -2,8 +2,9 @@
 
 A debugger for shell scripts that runs in a terminal: no Swing, no JavaFX, so it works over
 SSH and on servers without a display. It uses [fsh](https://github.com/parley-project/parley-fsh),
-the FileSource Shell, as the interpreter and the UI-free core of
-[Fsh Studio](https://github.com/parley-project/parley-fsh-studio) (`us.bringardner.fsh.ide.core`) for
+the FileSource Shell, as the interpreter and
+[parley-fsh-debug](https://github.com/parley-project/parley-fsh-debug) (`us.bringardner.fsh.debug`),
+which it shares with [Fsh Studio](https://github.com/parley-project/parley-fsh-studio), for
 running and debugging. fsh aims to be close to bash/POSIX, so fshdb works for those scripts too.
 
 Commands are like gdb's or bashdb's. Scripts are edited with your own editor (`$VISUAL` or

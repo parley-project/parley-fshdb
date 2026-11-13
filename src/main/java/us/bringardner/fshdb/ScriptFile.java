@@ -17,10 +17,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import us.bringardner.fsh.ide.core.RunSettings;
-import us.bringardner.fsh.ide.core.RunSettingsStore;
-import us.bringardner.fsh.ide.core.ScriptDocument;
-import us.bringardner.fsh.ide.core.ScriptText;
+import us.bringardner.fsh.debug.RunSettings;
+import us.bringardner.fsh.debug.RunSettingsStore;
+import us.bringardner.fsh.debug.ScriptDocument;
+import us.bringardner.fsh.debug.ScriptText;
 import us.bringardner.parley.files.FileSource;
 import us.bringardner.parley.files.FileSourceFactory;
 import us.bringardner.parley.files.fileproxy.FileProxyFactory;
@@ -32,7 +32,7 @@ import us.bringardner.parley.files.fileproxy.FileProxyFactory;
  * Line numbers are the file's (1-based), as an editor shows them, and the code that runs is
  * the file as it is, so $LINENO and fsh's messages agree with them too. A script saved by an
  * earlier fsh-ide still has its settings in comment lines (#BjlIdeScriptArgs= and so on, see
- * ScriptDocument): they're read for the settings and run as blank lines. fsh-ide's core numbers
+ * ScriptDocument): they're read for the settings and run as blank lines. parley-fsh-debug numbers
  * lines from 0 ("editor lines"); here that's the file line less one.
  * <p>
  * The settings come from those lines if the script has them, else from the user's run

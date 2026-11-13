@@ -22,11 +22,11 @@ import java.util.Map;
 
 import us.bringardner.fsh.DebugContext.RunState;
 import us.bringardner.fsh.ShellContext;
-import us.bringardner.fsh.ide.core.Breakpoint;
-import us.bringardner.fsh.ide.core.DebugSession;
-import us.bringardner.fsh.ide.core.DebugVariables;
-import us.bringardner.fsh.ide.core.RunSettings;
-import us.bringardner.fsh.ide.core.ScriptRun;
+import us.bringardner.fsh.debug.Breakpoint;
+import us.bringardner.fsh.debug.DebugSession;
+import us.bringardner.fsh.debug.DebugVariables;
+import us.bringardner.fsh.debug.RunSettings;
+import us.bringardner.fsh.debug.ScriptRun;
 
 /**
  * Runs and debugs one script: its breakpoints, the run, where it's stopped and its variables.
@@ -516,7 +516,7 @@ public class DebugEngine implements DebugTarget {
 			return null;
 		}
 		Map<String,String> ret = new java.util.LinkedHashMap<>();
-		for(us.bringardner.fsh.ide.core.Variable var : DebugVariables.list(v, all)) {
+		for(us.bringardner.fsh.debug.Variable var : DebugVariables.list(v, all)) {
 			ret.put(var.getName(), Debugger.format(var.getValue()));
 		}
 		return ret;
