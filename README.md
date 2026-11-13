@@ -1,6 +1,6 @@
 # fshdb
 
-A debugger for shell scripts that runs in a terminal: no Swing, no JavaFX, so it works over
+A debugger for shell scripts that runs in a terminal: no Swing, so it works over
 SSH and on servers without a display. It uses [fsh](https://github.com/parley-project/parley-fsh),
 the FileSource Shell, as the interpreter and
 [parley-fsh-debug](https://github.com/parley-project/parley-fsh-debug) (`us.bringardner.fsh.debug`),

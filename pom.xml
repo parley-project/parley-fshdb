@@ -8,7 +8,7 @@
 	<artifactId>fshdb</artifactId>
 	<version>2.0.0-SNAPSHOT</version>
 	<name>fshdb - console debugger for shell scripts</name>
-	<description>Runs and debugs bash/POSIX-style scripts in a terminal (no Swing or JavaFX), using
+	<description>Runs and debugs bash/POSIX-style scripts in a terminal (no Swing), using
 		fsh (the FileSource Shell) as the interpreter and parley-fsh-debug (shared with Fsh Studio)
 		for running and debugging. Scripts are edited with $EDITOR.</description>
 	<url>https://github.com/parley-project/parley-fshdb</url>
