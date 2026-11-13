@@ -23,7 +23,7 @@ import us.bringardner.fsh.debug.Breakpoint;
 /**
  * The breakpoints, numbered 1, 2 ... as they're made, on file lines (1-based).
  * <p>
- * fsh-ide's DebugSession looks breakpoints up by editor line on the script's thread; that
+ * Fsh Studio's DebugSession looks breakpoints up by editor line on the script's thread; that
  * lookup (forEditorLine) reads a concurrent map that is rebuilt when breakpoints or the
  * script's lines change.
  * <p>
@@ -32,7 +32,7 @@ import us.bringardner.fsh.debug.Breakpoint;
  */
 public class Breakpoints {
 
-	/** A breakpoint: fsh-ide's Breakpoint (condition, hit count, enabled) plus its number and file line. */
+	/** A breakpoint: Fsh Studio's Breakpoint (condition, hit count, enabled) plus its number and file line. */
 	public static final class Entry {
 		public final int number;
 		public final int fileLine;
