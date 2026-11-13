@@ -3,7 +3,7 @@
 A debugger for shell scripts that runs in a terminal: no Swing, no JavaFX, so it works over
 SSH and on servers without a display. It uses [fsh](https://github.com/parley-project/parley-fsh),
 the FileSource Shell, as the interpreter and the UI-free core of
-[fsh-ide](https://github.com/parley-project/parley-fsh-ide) (`us.bringardner.fsh.ide.core`) for
+[Fsh Studio](https://github.com/parley-project/parley-fsh-ide) (`us.bringardner.fsh.ide.core`) for
 running and debugging. fsh aims to be close to bash/POSIX, so fshdb works for those scripts too.
 
 Commands are like gdb's or bashdb's. Scripts are edited with your own editor (`$VISUAL` or
@@ -78,9 +78,9 @@ SCRIPT can be a local file or a URL a parley-files file system understands
 (`sftp://user@host/home/me/job.sh`, `ftp://...`). `edit` on a remote script edits a local copy
 and writes it back.
 
-A script is run with the arguments and redirects fsh-ide keeps for it (in
+A script is run with the arguments and redirects Fsh Studio keeps for it (in
 `~/.fsh-ide/run-settings`); arguments on fshdb's command line, and `set args`, replace them for
-fshdb only. A script saved by an earlier fsh-ide may still carry them in comment lines
+fshdb only. A script saved by an earlier Fsh Studio may still carry them in comment lines
 (`#BjlIdeScriptArgs=` ...): fshdb reads those and runs them as blank lines. The script runs as it
 is in its file, so line numbers, `$LINENO` and fsh's messages are always the file's.
 
@@ -153,15 +153,15 @@ server's PATH. `FSHDB_JAVA_OPTS` passes options to Java.
 
 ## How it works
 
-fshdb is a front end like fsh-ide's Swing and JavaFX IDEs: `ScriptRun` runs the script on its
+fshdb is a front end like Fsh Studio: `ScriptRun` runs the script on its
 own thread with the terminal as its standard streams; a `DebugSession` stops it at breakpoints.
 `DebugEngine` holds the run, the breakpoints and where the script is stopped; the command line
 (`Debugger`) and the DAP adapter (`FshdbAdapter`, served by `DapHost`) are two front ends to it.
 The command line works through the `DebugTarget` interface, so with `--attach` it drives a
 `RemoteTarget` instead: a DAP client of another fshdb's `FshdbAdapter`.
-`ConsoleDebugSession` adds what a command-line debugger needs on top of fsh-ide's session:
+`ConsoleDebugSession` adds what a command-line debugger needs on top of Fsh Studio's session:
 `next` and `finish` by function depth, `step` that doesn't stop on a function's `{` line, and
-`start`. Only fsh-ide's core classes are used; its pom's Swing and JavaFX libraries are excluded.
+`start`. Only Fsh Studio's core classes are used; its pom's Swing libraries are excluded.
 
 ## License
 
