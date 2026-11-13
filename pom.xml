@@ -38,7 +38,7 @@
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<maven.compiler.release>11</maven.compiler.release>
 		<fsh.version>2.0.0-SNAPSHOT</fsh.version>
-		<fsh-ide.version>2.0.0-SNAPSHOT</fsh-ide.version>
+		<parley-fsh-studio.version>2.0.0-SNAPSHOT</parley-fsh-studio.version>
 		<jline.version>3.30.17</jline.version>
 		<parley.version>2.0.0-SNAPSHOT</parley.version>
 	</properties>
@@ -237,8 +237,8 @@
 		-->
 		<dependency>
 			<groupId>us.bringardner</groupId>
-			<artifactId>fsh-ide</artifactId>
-			<version>${fsh-ide.version}</version>
+			<artifactId>parley-fsh-studio</artifactId>
+			<version>${parley-fsh-studio.version}</version>
 			<exclusions>
 				<exclusion>
 					<groupId>us.bringardner.parley</groupId>

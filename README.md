@@ -3,7 +3,7 @@
 A debugger for shell scripts that runs in a terminal: no Swing, no JavaFX, so it works over
 SSH and on servers without a display. It uses [fsh](https://github.com/parley-project/parley-fsh),
 the FileSource Shell, as the interpreter and the UI-free core of
-[Fsh Studio](https://github.com/parley-project/parley-fsh-ide) (`us.bringardner.fsh.ide.core`) for
+[Fsh Studio](https://github.com/parley-project/parley-fsh-studio) (`us.bringardner.fsh.ide.core`) for
 running and debugging. fsh aims to be close to bash/POSIX, so fshdb works for those scripts too.
 
 Commands are like gdb's or bashdb's. Scripts are edited with your own editor (`$VISUAL` or
@@ -136,7 +136,7 @@ The DAP side is [parley-dap](https://github.com/parley-project/parley-dap).
 ## Requirements
 
 - Java 11 or later
-- fsh, fsh-ide and parley-dap (their SNAPSHOTs: `mvn install` them first), and JLine 3 (from
+- fsh, parley-fsh-studio and parley-dap (their SNAPSHOTs: `mvn install` them first), and JLine 3 (from
   Maven Central)
 - Linux or macOS terminal (Ctrl-C handling and terminal input need a real terminal; Windows
   isn't tested)
