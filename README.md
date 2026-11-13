@@ -80,7 +80,7 @@ SCRIPT can be a local file or a URL a parley-files file system understands
 and writes it back.
 
 A script is run with the arguments and redirects Fsh Studio keeps for it (in
-`~/.fsh-ide/run-settings`); arguments on fshdb's command line, and `set args`, replace them for
+`~/.fsh-studio/run-settings`); arguments on fshdb's command line, and `set args`, replace them for
 fshdb only. A script saved by an earlier Fsh Studio may still carry them in comment lines
 (`#BjlIdeScriptArgs=` ...): fshdb reads those and runs them as blank lines. The script runs as it
 is in its file, so line numbers, `$LINENO` and fsh's messages are always the file's.
