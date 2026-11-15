@@ -4,6 +4,9 @@
 
 Built on fsh and parley-fsh-debug 1.1.0.
 
+- Maven coordinates: `us.bringardner:fshdb` → `us.bringardner:parley-fshdb`, built on
+  `us.bringardner:parley-fsh`. The all-in-one jar is `target/parley-fshdb-VERSION-all.jar`, and
+  `bin/fshdb` looks for that name.
 - Running and debugging come from parley-fsh-debug (`us.bringardner.fsh.debug`), a library shared
   with Fsh Studio, instead of Fsh Studio's jar, so fshdb no longer depends on the IDE (or has to
   leave out its user-interface libraries). Its all-in-one jar is about 2 MB smaller.

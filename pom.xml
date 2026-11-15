@@ -62,7 +62,7 @@
 				</configuration>
 			</plugin>
 			<plugin>
-				<!-- target/fshdb-<version>-all.jar: one jar to copy to a server (java -jar) -->
+				<!-- target/parley-fshdb-<version>-all.jar: one jar to copy to a server (java -jar) -->
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-shade-plugin</artifactId>
 				<version>3.6.0</version>
@@ -129,7 +129,7 @@
 						<option>-Djava.awt.headless=true</option>
 					</options>
 					<!-- (fsh's keyboard library and fshexec, from fsh's native jar; through fshexec -j, as fsh) -->
-					<nativeFrom>us.bringardner:fsh</nativeFrom>
+					<nativeFrom>us.bringardner:parley-fsh</nativeFrom>
 					<wrapper>
 						<part>{native}/fshexec</part>
 						<part>-j</part>
@@ -227,7 +227,7 @@
 		<!-- The interpreter. Brings parley-files and its FTP and SFTP file systems. -->
 		<dependency>
 			<groupId>us.bringardner</groupId>
-			<artifactId>fsh</artifactId>
+			<artifactId>parley-fsh</artifactId>
 			<version>${fsh.version}</version>
 		</dependency>
 		<!-- Running and debugging (shared with Fsh Studio; no user interface) -->
