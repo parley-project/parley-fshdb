@@ -146,10 +146,10 @@ The DAP side is [parley-dap](https://github.com/parley-project/parley-dap).
 
 ```sh
 mvn package
-bin/fshdb script.sh            # or: java -jar target/fshdb-1.0.0-SNAPSHOT-all.jar script.sh
+bin/fshdb script.sh            # or: java -jar target/parley-fshdb-2.0.0-SNAPSHOT-all.jar script.sh
 ```
 
-`target/fshdb-<version>-all.jar` holds everything (about 10 MB): copy it and `bin/fshdb` to a
+`target/parley-fshdb-<version>-all.jar` holds everything (about 10 MB): copy it and `bin/fshdb` to a
 server's PATH. `FSHDB_JAVA_OPTS` passes options to Java.
 
 ## How it works
